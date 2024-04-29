@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: LGPL-3.0-only
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {Request} from "./Common.sol";
+
+contract BridgeStorage {
+    EnumerableSet.AddressSet internal qualifiedUsers;
+
+    address public minter;
+    address public fbtc;
+
+    mapping(address qualifiedUser => bytes depositAddress)
+        public depositAddresses;
+    mapping(address qualifiedUser => bytes withdrawalAddress)
+        public withdrawalAddresses;
+
+    mapping(bytes depositAddress => address qualifiedUser)
+        public depositAddressToUser; // For uniqueness check
+
+    bytes32[] public requestHashes;
+    mapping(bytes32 _hash => Request r) public requests;
+
+    mapping(bytes32 bytesHash => bool used) public usedDepositTxs;
+    mapping(bytes32 bytesHash => bool used) public usedWithdrawalTxs;
+
+    mapping(bytes32 srcHash => bytes32 dstHash)
+        public crosschainRequestConfirmation;
+
+    address public feeModel;
+    address public feeRecipient;
+
+    uint256[50] private __gap;
+}
