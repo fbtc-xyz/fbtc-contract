@@ -10,19 +10,19 @@ contract BridgeStorage {
     address public minter;
     address public fbtc;
 
-    mapping(address qualifiedUser => bytes depositAddress)
+    mapping(address qualifiedUser => string depositAddress)
         public depositAddresses;
-    mapping(address qualifiedUser => bytes withdrawalAddress)
+    mapping(address qualifiedUser => string withdrawalAddress)
         public withdrawalAddresses;
 
-    mapping(bytes depositAddress => address qualifiedUser)
+    mapping(string depositAddress => address qualifiedUser)
         public depositAddressToUser; // For uniqueness check
 
     bytes32[] public requestHashes;
     mapping(bytes32 _hash => Request r) public requests;
 
-    mapping(bytes32 bytesHash => bool used) public usedDepositTxs;
-    mapping(bytes32 bytesHash => bool used) public usedWithdrawalTxs;
+    mapping(bytes32 bytesHash => bytes32 requestHash) public usedDepositTxs;
+    mapping(bytes32 bytesHash => bytes32 requestHash) public usedWithdrawalTxs;
 
     mapping(bytes32 srcHash => bytes32 dstHash)
         public crosschainRequestConfirmation;

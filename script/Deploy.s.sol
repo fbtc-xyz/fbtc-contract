@@ -45,10 +45,6 @@ contract DeployScript is BaseScript {
         minter = new FBTCMinter(OWNER, address(bridge));
         bridge.setMinter(address(minter));
 
-        // minter.addOperator(Operation.Mint, OWNER);
-        // minter.addOperator(Operation.Burn, OWNER);
-        // minter.addOperator(Operation.CrosschainConfirm, OWNER);
-
         // gov = new FBTCGovernor(OWNER);
         // gov.setFBTC(address(fbtc));
         // gov.setBridge(address(bridge));
@@ -70,6 +66,6 @@ contract DeployScript is BaseScript {
     }
 
     function run() public override {
-        deploy("smnt", "dev", true);
+        // deploy("smnt", "dev", true);
     }
 }

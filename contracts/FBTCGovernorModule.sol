@@ -82,8 +82,8 @@ contract FBTCGovernorModule is AccessControlDefaultAdminRules {
 
     function addQualifiedUser(
         address _qualifiedUser,
-        bytes calldata _depositAddress,
-        bytes calldata _withdrawalAddress
+        string calldata _depositAddress,
+        string calldata _withdrawalAddress
     ) external onlyRole(USER_MANAGER_RULE) {
         _callAsSafe(
             address(bridge),

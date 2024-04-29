@@ -7,6 +7,26 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 
 import {FBTC} from "../contracts/FBTC.sol";
 
+
+contract NewFBTC is FBTC {
+
+    uint256 public value;
+
+    constructor(address _owner, address _bridge) FBTC(_owner, _bridge) {
+    }
+
+    function setValue(uint256 v) external {
+        value = v;
+    }
+
+    function getBridge() public view returns (address) {
+        return bridge;
+    }
+    function transfer(address, uint256) public override returns (bool){
+        revert("stop");
+    }
+}
+
 contract FBTCTest is Test {
     FBTC public btc;
 
@@ -75,6 +95,24 @@ contract FBTCTest is Test {
         btc.burn(OWNER, 1);
     }
 
+    function testRescue() public {
+        address SC = address(btc);
+        btc.mint(OWNER, 1000);
+
+        btc.transfer(SC, 1000);
+        assertEq(btc.balanceOf(SC), 1000);
+
+        btc.rescue(SC, ONE);
+        assertEq(btc.balanceOf(SC), 0);
+        assertEq(btc.balanceOf(ONE), 1000);
+
+        vm.deal(SC, 100);
+        assertEq(SC.balance, 100);
+        btc.rescue(address(0), ONE);
+        assertEq(SC.balance, 0);
+        assertEq(ONE.balance, 100);
+    }
+
     function testProxy() public {
         FBTC impl = new FBTC(OWNER, ONE);
         assertEq(impl.owner(), OWNER);
@@ -98,5 +136,17 @@ contract FBTCTest is Test {
 
         vm.expectRevert(Initializable.InvalidInitialization.selector);
         proxy.initialize(OWNER, ONE);
+
+        // Test proxy upgrade
+        NewFBTC newImpl = new NewFBTC(OWNER, OWNER);
+        proxy.upgradeToAndCall(address(newImpl), abi.encodeCall(NewFBTC.setValue, (123)));
+
+        NewFBTC newProxy = NewFBTC(address(proxy));
+        assertEq(newProxy.getBridge(), newProxy.bridge());
+        assertEq(newProxy.decimals(), 10);
+        assertEq(newProxy.value(), 123);
+
+        vm.expectRevert(bytes("stop"));
+        newProxy.transfer(OWNER, 0);
     }
 }

@@ -25,8 +25,8 @@ contract FBTCGovernorTest is Test {
     address immutable OWNER = address(this);
     address constant FEE = address(0xfee);
 
-    bytes constant BTC_ADDR1 = "address1";
-    bytes constant BTC_ADDR2 = "address2";
+    string constant BTC_ADDR1 = "address1";
+    string constant BTC_ADDR2 = "address2";
     bytes32 constant TX_DATA1 = "data1";
     bytes32 constant TX_DATA2 = "data2";
     bytes32 constant TX_DATA3 = "data3";

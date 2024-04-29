@@ -6,7 +6,7 @@ import {FBTC} from "../contracts/FBTC.sol";
 import {FBTCMinter, FireBridge} from "../contracts/Minter.sol";
 import {FeeModel} from "../contracts/FeeModel.sol";
 
-import {Operation, Request, RequestLib, ChainCode} from "../contracts/Common.sol";
+import {Operation, Request, RequestLib, ChainCode, Status} from "../contracts/Common.sol";
 
 contract FireBridgeTest is Test {
     using RequestLib for Request;
@@ -20,8 +20,8 @@ contract FireBridgeTest is Test {
     address immutable OWNER = address(this);
     address constant FEE = address(0xfee);
 
-    bytes constant BTC_ADDR1 = "address1";
-    bytes constant BTC_ADDR2 = "address2";
+    string constant BTC_ADDR1 = "address1";
+    string constant BTC_ADDR2 = "address2";
     bytes32 constant TX_DATA1 = "data1";
     bytes32 constant TX_DATA2 = "data2";
     bytes32 constant TX_DATA3 = "data3";
@@ -51,8 +51,8 @@ contract FireBridgeTest is Test {
 
     function testQualifiedUser() public {
         assertFalse(bridge.isQualifiedUser(ONE));
-        assertEq(bridge.depositAddresses(ONE).length, 0);
-        assertEq(bridge.withdrawalAddresses(ONE).length, 0);
+        assertEq(bridge.depositAddresses(ONE), "");
+        assertEq(bridge.withdrawalAddresses(ONE), "");
 
         bridge.addQualifiedUser(ONE, BTC_ADDR2, BTC_ADDR1);
 
@@ -62,8 +62,8 @@ contract FireBridgeTest is Test {
 
         bridge.removeQualifiedUser(ONE);
         assertFalse(bridge.isQualifiedUser(ONE));
-        assertEq(bridge.depositAddresses(ONE).length, 0);
-        assertEq(bridge.withdrawalAddresses(ONE).length, 0);
+        assertEq(bridge.depositAddresses(ONE), "");
+        assertEq(bridge.withdrawalAddresses(ONE), "");
     }
 
     function testRequest() public {
@@ -86,9 +86,9 @@ contract FireBridgeTest is Test {
         assertEq(r.dstAddress, abi.encode(OWNER));
         assertEq(r.amount, 1000);
         assertEq(r.srcChain, ChainCode.BTC);
-        assertEq(r.srcAddress, bridge.depositAddresses(OWNER));
+        assertEq(r.srcAddress, bytes(bridge.depositAddresses(OWNER)));
         assertEq(r.extra, abi.encode(TX_DATA1, 1));
-        assertEq(r.confirmed, false);
+        assertTrue(r.status == Status.Pending);
 
         minter.confirmMintRequest(_hash);
 
@@ -100,9 +100,9 @@ contract FireBridgeTest is Test {
         assertEq(r.srcAddress, abi.encode(OWNER));
         assertEq(r.amount, 500);
         assertEq(r.dstChain, ChainCode.BTC);
-        assertEq(r.dstAddress, bridge.withdrawalAddresses(OWNER));
+        assertEq(r.dstAddress, bytes(bridge.withdrawalAddresses(OWNER)));
         assertEq(r.extra, "");
-        assertEq(r.confirmed, false);
+        assertTrue(r.status == Status.Pending);
 
         // Cross-chain request
         (_hash, r) = bridge.addCrosschainRequest(
@@ -118,7 +118,7 @@ contract FireBridgeTest is Test {
         assertEq(r.dstChain, DST_CHAIN1);
         assertEq(r.dstAddress, abi.encode(ONE));
         assertEq(r.extra, abi.encode(_hash));
-        assertEq(r.confirmed, true);
+        assertTrue(r.status == Status.Unused);
 
         // Cross-chain confirmation
         Request memory r2;
@@ -140,14 +140,25 @@ contract FireBridgeTest is Test {
 
         minter.confirmMintRequest(_hash1);
         Request memory r = bridge.getRequestByHash(_hash1);
-        assertEq(r.confirmed, true);
+
+        assertTrue(r.status == Status.Confirmed);
         assertEq(fbtc.balanceOf(OWNER), 1000);
 
-        vm.expectRevert("Already confirmed");
+        vm.expectRevert("Invalid request status");
         minter.confirmMintRequest(_hash1);
 
+        bridge.blockDepositTx(TX_DATA2, 1);
+
+        vm.expectRevert("Invalid request status");
         minter.confirmMintRequest(_hash2);
-        assertEq(fbtc.balanceOf(OWNER), 2000);
+
+        r = bridge.getRequestByHash(_hash1);
+        assertTrue(r.status == Status.Confirmed);
+        assertEq(fbtc.balanceOf(OWNER), 1000);
+
+        bridge.blockDepositTx(TX_DATA2, 2);
+        vm.expectRevert("Used BTC deposit tx");
+        bridge.addMintRequest(1000, TX_DATA2, 2);
     }
 
     function testBurn() public {
@@ -163,11 +174,11 @@ contract FireBridgeTest is Test {
         assertEq(fbtc.balanceOf(OWNER), 500);
 
         r = bridge.getRequestByHash(_hash);
-        assertEq(r.confirmed, false);
+        assertTrue(r.status == Status.Pending);
 
         minter.confirmBurnRequest(_hash, TX_DATA2, 0);
         r = bridge.getRequestByHash(_hash);
-        assertEq(r.confirmed, true);
+        assertTrue(r.status == Status.Confirmed);
         assertEq(r.extra, abi.encode(TX_DATA2, 0));
 
         vm.expectRevert();
@@ -180,7 +191,6 @@ contract FireBridgeTest is Test {
     ) internal returns (bytes32 _hash, Request memory _dstR) {
         // Should be correct set in source request.
         assertEq(_r.extra, abi.encode(_srcRequestHash));
-        _r.confirmed = true;
         _r.op = Operation.CrosschainConfirm;
 
         uint256 backup = block.chainid;
@@ -228,7 +238,6 @@ contract FireBridgeTest is Test {
         rs[2] = bridge.getRequestByHash(_hash3);
         for (uint i = 0; i <= 2; i++) {
             rs[i].op = Operation.CrosschainConfirm;
-            rs[i].confirmed = true;
         }
 
         uint256 chainId = block.chainid;

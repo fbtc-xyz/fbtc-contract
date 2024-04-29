@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-import {Request, RequestLib, Operation, ChainCode} from "./Common.sol";
+import {Request, RequestLib, Operation, Status, ChainCode} from "./Common.sol";
 import {BridgeStorage} from "./BridgeStorage.sol";
 import {FToken} from "./FToken.sol";
 import {Governable} from "./Governable.sol";
@@ -15,13 +15,13 @@ contract FireBridge is BridgeStorage, Governable {
 
     event QualifiedUserAdded(
         address indexed _user,
-        bytes _depositAddress,
-        bytes _withdrawalAddress
+        string _depositAddress,
+        string _withdrawalAddress
     );
     event QualifiedUserEdited(
         address indexed _user,
-        bytes _depositAddress,
-        bytes _withdrawalAddress
+        string _depositAddress,
+        string _withdrawalAddress
     );
 
     event QualifiedUserRemoved(address indexed _user);
@@ -30,9 +30,14 @@ contract FireBridge is BridgeStorage, Governable {
     event MinterSet(address indexed _minter);
     event FeeModelSet(address indexed _feeModel);
     event FeeRecipientSet(address indexed _feeRecipient);
+    event DepositTxBlocked(
+        bytes32 indexed _depositTxid,
+        uint256 indexed _outputIndex
+    );
 
     event RequestAdded(bytes32 indexed _hash, Operation indexed op, Request _r);
     event RequestConfirmed(bytes32 indexed _hash);
+    event RequestRejected(bytes32 indexed _hash);
 
     event FeePaid(address indexed _feeRecipient, uint256 indexed _feeAmount);
 
@@ -93,8 +98,8 @@ contract FireBridge is BridgeStorage, Governable {
     /// Owner methods.
     function addQualifiedUser(
         address _user,
-        bytes calldata _depositAddress,
-        bytes calldata _withdrawalAddress
+        string calldata _depositAddress,
+        string calldata _withdrawalAddress
     ) external onlyOwner {
         require(qualifiedUsers.add(_user), "User already qualified");
         require(
@@ -109,8 +114,8 @@ contract FireBridge is BridgeStorage, Governable {
 
     function editQualifiedUser(
         address _user,
-        bytes calldata _depositAddress,
-        bytes calldata _withdrawalAddress
+        string calldata _depositAddress,
+        string calldata _withdrawalAddress
     ) external onlyOwner {
         require(isQualifiedUser(_user), "User not qualified");
         require(
@@ -118,7 +123,7 @@ contract FireBridge is BridgeStorage, Governable {
             "Deposit address used"
         );
 
-        bytes memory _oldDepositAddress = depositAddresses[_user];
+        string memory _oldDepositAddress = depositAddresses[_user];
         delete depositAddressToUser[_oldDepositAddress];
 
         depositAddresses[_user] = _depositAddress;
@@ -129,7 +134,7 @@ contract FireBridge is BridgeStorage, Governable {
 
     function removeQualifiedUser(address _qualifiedUser) external onlyOwner {
         qualifiedUsers.remove(_qualifiedUser);
-        bytes memory _depositAddress = depositAddresses[_qualifiedUser];
+        string memory _depositAddress = depositAddresses[_qualifiedUser];
         delete depositAddressToUser[_depositAddress];
         delete depositAddresses[_qualifiedUser];
         delete withdrawalAddresses[_qualifiedUser];
@@ -156,6 +161,31 @@ contract FireBridge is BridgeStorage, Governable {
         emit FeeRecipientSet(_feeRecipient);
     }
 
+    /// @notice Mark the deposit tx invalid and reject the minting request if any.
+    function blockDepositTx(
+        bytes32 _depositTxid,
+        uint256 _outputIndex
+    ) external onlyOwner {
+        bytes32 REJECTED = bytes32(uint256(1));
+        bytes memory _depositTxData = abi.encode(_depositTxid, _outputIndex);
+        bytes32 depositDataHash = keccak256(_depositTxData);
+
+        bytes32 requestHash = usedDepositTxs[depositDataHash];
+        require(requestHash != REJECTED, "Already blocked");
+
+        if (requestHash != bytes32(0)) {
+            // Update confirmation status.
+            Request storage r = requests[requestHash];
+            if (r.nonce > 0) {
+                r.status = Status.Rejected;
+                emit RequestRejected(requestHash);
+            }
+        }
+        // Mark it as rejected.
+        usedDepositTxs[depositDataHash] = REJECTED;
+        emit DepositTxBlocked(_depositTxid, _outputIndex);
+    }
+
     /// QualifiedUser methods.
 
     /// @notice Initiate a FBTC minting request for the qualifiedUser.
@@ -180,21 +210,23 @@ contract FireBridge is BridgeStorage, Governable {
         bytes memory _depositTxData = abi.encode(_depositTxid, _outputIndex);
 
         bytes32 depositDataHash = keccak256(_depositTxData);
-        require(!usedDepositTxs[depositDataHash], "Used BTC deposit tx");
-        usedDepositTxs[depositDataHash] = true;
+        require(
+            usedDepositTxs[depositDataHash] == bytes32(uint256(0)),
+            "Used BTC deposit tx"
+        );
 
         // Compose request. Main -> Self
         _r = Request({
             nonce: nonce(),
             op: Operation.Mint,
             srcChain: MAIN_CHAIN,
-            srcAddress: depositAddresses[msg.sender],
+            srcAddress: bytes(depositAddresses[msg.sender]),
             dstChain: chain(),
             dstAddress: abi.encode(msg.sender),
             amount: _amount,
             fee: 0, // To be set in `_splitFeeAndUpdate`
             extra: _depositTxData,
-            confirmed: false
+            status: Status.Pending
         });
 
         // Split fee.
@@ -202,6 +234,9 @@ contract FireBridge is BridgeStorage, Governable {
 
         // Save request.
         _hash = _addRequest(_r);
+
+        // Update deposit data usage status.
+        usedDepositTxs[depositDataHash] = _hash;
     }
 
     /// @notice Initiate a FBTC burning request for the qualifiedUser.
@@ -226,11 +261,11 @@ contract FireBridge is BridgeStorage, Governable {
             srcChain: chain(),
             srcAddress: abi.encode(msg.sender),
             dstChain: MAIN_CHAIN,
-            dstAddress: withdrawalAddresses[msg.sender],
+            dstAddress: bytes(withdrawalAddresses[msg.sender]),
             amount: _amount,
             fee: 0, // To be set in `_splitFeeAndUpdate`
             extra: "", // Unset until confirmed
-            confirmed: false
+            status: Status.Pending
         });
 
         // Split fee.
@@ -273,7 +308,7 @@ contract FireBridge is BridgeStorage, Governable {
             dstAddress: _targetAddress,
             fee: 0,
             extra: "", // Not include in hash.
-            confirmed: true // auto confirmed.
+            status: Status.Unused // Not used.
         });
 
         // Split fee.
@@ -283,8 +318,6 @@ contract FireBridge is BridgeStorage, Governable {
         _hash = _addRequest(_r);
         _r.extra = abi.encode(_hash); // update return value.
         requests[_hash].extra = abi.encode(_hash); // update storage.
-
-        emit RequestConfirmed(_hash); // auto confirmed.
 
         // Pay fee
         _payFee(_r.fee, false);
@@ -306,10 +339,10 @@ contract FireBridge is BridgeStorage, Governable {
 
         uint256 _amount = r.amount;
         require(_amount > 0, "Invalid request amount");
-        require(!r.confirmed, "Already confirmed");
+        require(r.status == Status.Pending, "Invalid request status");
 
         // Update status.
-        r.confirmed = true;
+        r.status = Status.Confirmed;
         emit RequestConfirmed(_hash);
 
         // Mint tokens
@@ -336,7 +369,7 @@ contract FireBridge is BridgeStorage, Governable {
 
         require(r.op == Operation.Burn, "Not Burn request");
         require(r.amount > 0, "Invalid request amount");
-        require(!r.confirmed, "Already confirmed");
+        require(r.status == Status.Pending, "Invalid request status");
 
         bytes memory _withdrawalTxData = abi.encode(
             _withdrawalTxid,
@@ -345,13 +378,13 @@ contract FireBridge is BridgeStorage, Governable {
 
         bytes32 _withdrawalDataHash = keccak256(_withdrawalTxData);
         require(
-            !usedWithdrawalTxs[_withdrawalDataHash],
+            usedWithdrawalTxs[_withdrawalDataHash] == bytes32(uint256(0)),
             "Used BTC withdrawal tx"
         );
-        usedWithdrawalTxs[_withdrawalDataHash] = true;
+        usedWithdrawalTxs[_withdrawalDataHash] = _hash;
 
         // Update status.
-        r.confirmed = true;
+        r.status = Status.Confirmed;
         r.extra = _withdrawalTxData;
 
         emit RequestConfirmed(_hash);
@@ -362,7 +395,7 @@ contract FireBridge is BridgeStorage, Governable {
     ///      source chain. Note:
     ///       1. The `op` should be `CrosschainConfirm`
     ///       2. The `nonce` is the source nonce, used to calc source request hash.
-    ///       3. The `confirmed` should be `true`.
+    ///       3. The `status` should be `Unused` (0).
     ///       4. The `extra` should contain the source request hash.
     /// @param r The full cross-chain request.
     /// @return _dsthash The hash of the confirmation request.
@@ -382,7 +415,7 @@ contract FireBridge is BridgeStorage, Governable {
             r.op == Operation.CrosschainConfirm,
             "Not CrosschainConfirm request"
         );
-        require(r.confirmed == true, "Not confirmed");
+        require(r.status == Status.Unused, "Status should not be used");
 
         bytes32 srcHash = abi.decode(r.extra, (bytes32));
 
@@ -402,7 +435,6 @@ contract FireBridge is BridgeStorage, Governable {
         crosschainRequestConfirmation[srcHash] = _dsthash;
 
         _dstRequest = r;
-        emit RequestConfirmed(_dsthash); // auto confirmed.
 
         // Mint tokens.
         FToken(fbtc).mint(abi.decode(r.dstAddress, (address)), r.amount);

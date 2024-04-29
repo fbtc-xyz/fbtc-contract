@@ -12,11 +12,11 @@ contract BaseScript is Script {
         address opBurn;
         address opCross;
         address merchant1;
-        bytes deposit1;
-        bytes withdraw1;
+        string deposit1;
+        string withdraw1;
         address merchant2;
-        bytes deposit2;
-        bytes withdraw2;
+        string deposit2;
+        string withdraw2;
     }
 
     struct ContractConfig {

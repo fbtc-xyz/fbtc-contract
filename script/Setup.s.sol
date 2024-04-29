@@ -21,24 +21,32 @@ contract SetupScript is BaseScript {
         FireBridge bridge = FireBridge(c.bridge);
         FBTCMinter minter = FBTCMinter(c.minter);
 
-        bridge.removeQualifiedUser(0x966D99a04Fec209cf093C67e04A1c4Db1b22bEbd);
-        bridge.removeQualifiedUser(0xe21AE59Ef02cEf7c6Aed8eEfAdf5C45714D429F0);
+        // bridge.removeQualifiedUser(0x966D99a04Fec209cf093C67e04A1c4Db1b22bEbd);
+        // bridge.removeQualifiedUser(0xe21AE59Ef02cEf7c6Aed8eEfAdf5C45714D429F0);
 
         bridge.addQualifiedUser(i.merchant1, i.deposit1, i.withdraw1);
-
         bridge.addQualifiedUser(i.merchant2, i.deposit2, i.withdraw2);
+        bridge.addQualifiedUser(owner, "MockBTCAddr1", "MockBTCAddr2");
 
-        // minter.addOperator(Operation.Mint, i.opMint);
-        // minter.addOperator(Operation.Burn, i.opBurn);
-        // minter.addOperator(Operation.CrosschainConfirm, i.opCross);
+        minter.addOperator(Operation.Mint, i.opMint);
+        minter.addOperator(Operation.Burn, i.opBurn);
+        minter.addOperator(Operation.CrosschainConfirm, i.opCross);
 
         vm.stopBroadcast();
     }
 
-    function run() public override {
-        vm.createSelectFork("smnt");
-        InfraConfig memory i = loadInfraConfig("qa");
-        ContractConfig memory c = loadChainConfig("smnt_qa");
+    function initConfig(string memory chain, string memory tag) public {
+        vm.createSelectFork(chain);
+        string memory finalTag = string.concat(chain, "_", tag);
+        InfraConfig memory i = loadInfraConfig(finalTag);
+        ContractConfig memory c = loadChainConfig(finalTag);
         setupConfig(c, i);
+    }
+
+    function run() public override {
+        // vm.createSelectFork("smnt");
+        // InfraConfig memory i = loadInfraConfig("qa");
+        // ContractConfig memory c = loadChainConfig("smnt_qa");
+        // setupConfig(c, i);
     }
 }
