@@ -90,6 +90,11 @@ contract FireBridge is BridgeStorage, Governable {
     function _addRequest(Request memory r) internal returns (bytes32 _hash) {
         assert(r.nonce == requestHashes.length);
         _hash = r.getRequestHash();
+
+        // For CrosschainRequest: update extra with self hash.
+        if(r.op == Operation.CrosschainRequest){
+            r.extra = abi.encode(_hash); 
+        }
         requestHashes.push(_hash);
         requests[_hash] = r;
         emit RequestAdded(_hash, r.op, r);
@@ -316,8 +321,6 @@ contract FireBridge is BridgeStorage, Governable {
 
         // Save request.
         _hash = _addRequest(_r);
-        _r.extra = abi.encode(_hash); // update return value.
-        requests[_hash].extra = abi.encode(_hash); // update storage.
 
         // Pay fee
         _payFee(_r.fee, false);

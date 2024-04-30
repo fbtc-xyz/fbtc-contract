@@ -8,7 +8,7 @@ import {FireBridge} from "./FireBridge.sol";
 contract FBTCGovernor is AccessControlDefaultAdminRules {
     bytes32 public constant FBTC_PAUSER_ROLE = "fbtc.pauser";
     bytes32 public constant LOCKER_RULE = "fbtc.locker";
-    bytes32 public constant BRIDGE_PAUSER_RULE = "bridge.locker";
+    bytes32 public constant BRIDGE_PAUSER_RULE = "bridge.pauser";
     bytes32 public constant USER_MANAGER_RULE = "bridge.usermanager";
 
     FBTC public fbtc;

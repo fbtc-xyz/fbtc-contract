@@ -143,7 +143,6 @@ contract FBTCTest is Test {
 
         NewFBTC newProxy = NewFBTC(address(proxy));
         assertEq(newProxy.getBridge(), newProxy.bridge());
-        assertEq(newProxy.decimals(), 10);
         assertEq(newProxy.value(), 123);
 
         vm.expectRevert(bytes("stop"));

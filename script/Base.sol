@@ -7,16 +7,16 @@ import {stdJson} from "forge-std/StdJson.sol";
 contract BaseScript is Script {
     using stdJson for string;
 
-    struct InfraConfig {
+    struct MinterConfig {
         address opMint;
         address opBurn;
         address opCross;
-        address merchant1;
-        string deposit1;
-        string withdraw1;
-        address merchant2;
-        string deposit2;
-        string withdraw2;
+    }
+
+    struct MerchantConfig {
+        address merchant;
+        string deposit;
+        string withdraw;
     }
 
     struct ContractConfig {
@@ -24,6 +24,16 @@ contract BaseScript is Script {
         address fbtc;
         address feeModel;
         address bridge;
+    }
+
+
+    address public owner;
+    uint256 public deployerPrivateKey;
+
+    function setUp() public {
+        deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        owner = vm.addr(deployerPrivateKey);
+        console.log("owner", owner);
     }
 
     function getChainPath(
@@ -47,39 +57,44 @@ contract BaseScript is Script {
         return path;
     }
 
-    function loadInfraConfig(
+    function loadMerchantConfig(
         string memory name
-    ) public view returns (InfraConfig memory i) {
+    ) public view returns (MerchantConfig memory i) {
         string memory path = getPath("config.json");
         string memory json = vm.readFile(path);
-        bytes memory infraBytes = json.parseRaw(string.concat(".infra.", name));
-        i = abi.decode(infraBytes, (InfraConfig));
+        bytes memory infraBytes = json.parseRaw(string.concat(".merchant.", name));
+        i = abi.decode(infraBytes, (MerchantConfig));
     }
 
-    function loadChainConfig(
+    function loadMinterConfig(
+        string memory name
+    ) public view returns (MinterConfig memory c) {
+        string memory path = getPath("config.json");
+        string memory json = vm.readFile(path);
+        bytes memory _bytes = json.parseRaw(string.concat(".minter.", name));
+        c = abi.decode(_bytes, (MinterConfig));
+    }
+
+    function loadContractConfig(
+        string memory chain,
         string memory tag
     ) public view returns (ContractConfig memory c) {
-        string memory path = getPath(string.concat("addresses/", tag, ".json"));
+        string memory name = string.concat(chain, "_", tag);
+        string memory path = getPath(string.concat("addresses/", name, ".json"));
         string memory json = vm.readFile(path);
         bytes memory _bytes = json.parseRaw(".");
         c = abi.decode(_bytes, (ContractConfig));
     }
-
-    function saveChainConfig(
-        string memory tag,
-        ContractConfig memory c
-    ) public {
-        saveChainConfig(tag, c.minter, c.fbtc, c.feeModel, c.bridge);
-    }
-
-    function saveChainConfig(
+    function saveContractConfig(
+        string memory chain,
         string memory tag,
         address minter,
         address fbtc,
         address fee,
         address bridge
     ) public {
-        string memory path = getPath(string.concat("addresses/", tag, ".json"));
+        string memory name = string.concat(chain, "_", tag);
+        string memory path = getPath(string.concat("addresses/", name, ".json"));
 
         string memory json = "key";
         json.serialize("1_minter", minter);
@@ -90,7 +105,6 @@ contract BaseScript is Script {
     }
 
     function run() public virtual {
-        ContractConfig memory c = loadChainConfig("seth_qa");
-        console.log(c.bridge);
+        console.log("Nothing to do");
     }
 }

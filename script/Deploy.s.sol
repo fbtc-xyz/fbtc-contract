@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
 import {BaseScript, stdJson, console} from "./Base.sol";
 
 import {FBTC} from "../contracts/FBTC.sol";
@@ -18,34 +20,34 @@ contract DeployScript is BaseScript {
 
     using stdJson for string;
 
-    function setUp() public {}
-
     function deploy(
         string memory chain,
         string memory tag,
         bool useXTN
     ) public {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address OWNER = vm.addr(deployerPrivateKey);
-        console.log("owner", OWNER);
-
+        vm.createSelectFork(chain);
         vm.startBroadcast(deployerPrivateKey);
 
         bytes32 _mainChain = useXTN ? ChainCode.XTN : ChainCode.BTC;
-        bridge = new FireBridge(OWNER, _mainChain);
-        // bridge.addQualifiedUser(OWNER, "MockBTC1", "MockBTC2");
+        bridge = new FireBridge(owner, _mainChain);
 
-        feeModel = new FeeModel(OWNER);
+        // Wrap into proxy.
+        bridge= FireBridge(address(new ERC1967Proxy(
+            address(bridge),
+            abi.encodeCall(bridge.initialize, (owner))
+        )));
+
+        feeModel = new FeeModel(owner);
         bridge.setFeeModel(address(feeModel));
-        bridge.setFeeRecipient(OWNER);
+        bridge.setFeeRecipient(owner);
 
-        fbtc = new FBTC(OWNER, address(bridge));
+        fbtc = new FBTC(owner, address(bridge));
         bridge.setToken(address(fbtc));
 
-        minter = new FBTCMinter(OWNER, address(bridge));
+        minter = new FBTCMinter(owner, address(bridge));
         bridge.setMinter(address(minter));
 
-        // gov = new FBTCGovernor(OWNER);
+        // gov = new FBTCGovernor(owner);
         // gov.setFBTC(address(fbtc));
         // gov.setBridge(address(bridge));
         // fbtc.transferOwnership(address(gov));
@@ -56,8 +58,8 @@ contract DeployScript is BaseScript {
 
         vm.stopBroadcast();
 
-        saveChainConfig(
-            string.concat(chain, "_", tag),
+        saveContractConfig(
+            chain, tag,
             address(minter),
             address(fbtc),
             address(feeModel),
@@ -65,7 +67,19 @@ contract DeployScript is BaseScript {
         );
     }
 
-    function run() public override {
-        // deploy("smnt", "dev", true);
+
+    function upgradeBridge(string memory chain, string memory tag, bool useXTN) public {
+        vm.createSelectFork(chain);
+        vm.startBroadcast(deployerPrivateKey);
+
+        bytes32 _mainChain = useXTN ? ChainCode.XTN : ChainCode.BTC;
+        FireBridge newImpl = new FireBridge(owner, _mainChain);
+
+        ContractConfig memory c = loadContractConfig(chain, tag);
+        FireBridge proxy = FireBridge(c.bridge);
+        proxy.upgradeToAndCall(address(newImpl), "");
+        console.log("Upgrade new impl");
+        console.log(address(newImpl));
     }
+
 }
