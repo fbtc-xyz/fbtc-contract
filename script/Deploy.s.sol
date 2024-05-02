@@ -32,10 +32,14 @@ contract DeployScript is BaseScript {
         bridge = new FireBridge(owner, _mainChain);
 
         // Wrap into proxy.
-        bridge= FireBridge(address(new ERC1967Proxy(
-            address(bridge),
-            abi.encodeCall(bridge.initialize, (owner))
-        )));
+        bridge = FireBridge(
+            address(
+                new ERC1967Proxy(
+                    address(bridge),
+                    abi.encodeCall(bridge.initialize, (owner))
+                )
+            )
+        );
 
         feeModel = new FeeModel(owner);
         bridge.setFeeModel(address(feeModel));
@@ -59,7 +63,8 @@ contract DeployScript is BaseScript {
         vm.stopBroadcast();
 
         saveContractConfig(
-            chain, tag,
+            chain,
+            tag,
             address(minter),
             address(fbtc),
             address(feeModel),
@@ -67,8 +72,11 @@ contract DeployScript is BaseScript {
         );
     }
 
-
-    function upgradeBridge(string memory chain, string memory tag, bool useXTN) public {
+    function upgradeBridge(
+        string memory chain,
+        string memory tag,
+        bool useXTN
+    ) public {
         vm.createSelectFork(chain);
         vm.startBroadcast(deployerPrivateKey);
 
@@ -81,5 +89,4 @@ contract DeployScript is BaseScript {
         console.log("Upgrade new impl");
         console.log(address(newImpl));
     }
-
 }

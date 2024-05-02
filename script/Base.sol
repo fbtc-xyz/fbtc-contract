@@ -26,7 +26,6 @@ contract BaseScript is Script {
         address bridge;
     }
 
-
     address public owner;
     uint256 public deployerPrivateKey;
 
@@ -62,7 +61,9 @@ contract BaseScript is Script {
     ) public view returns (MerchantConfig memory i) {
         string memory path = getPath("config.json");
         string memory json = vm.readFile(path);
-        bytes memory infraBytes = json.parseRaw(string.concat(".merchant.", name));
+        bytes memory infraBytes = json.parseRaw(
+            string.concat(".merchant.", name)
+        );
         i = abi.decode(infraBytes, (MerchantConfig));
     }
 
@@ -80,11 +81,14 @@ contract BaseScript is Script {
         string memory tag
     ) public view returns (ContractConfig memory c) {
         string memory name = string.concat(chain, "_", tag);
-        string memory path = getPath(string.concat("addresses/", name, ".json"));
+        string memory path = getPath(
+            string.concat("addresses/", name, ".json")
+        );
         string memory json = vm.readFile(path);
         bytes memory _bytes = json.parseRaw(".");
         c = abi.decode(_bytes, (ContractConfig));
     }
+
     function saveContractConfig(
         string memory chain,
         string memory tag,
@@ -94,7 +98,9 @@ contract BaseScript is Script {
         address bridge
     ) public {
         string memory name = string.concat(chain, "_", tag);
-        string memory path = getPath(string.concat("addresses/", name, ".json"));
+        string memory path = getPath(
+            string.concat("addresses/", name, ".json")
+        );
 
         string memory json = "key";
         json.serialize("1_minter", minter);

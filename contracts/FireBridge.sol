@@ -92,8 +92,8 @@ contract FireBridge is BridgeStorage, Governable {
         _hash = r.getRequestHash();
 
         // For CrosschainRequest: update extra with self hash.
-        if(r.op == Operation.CrosschainRequest){
-            r.extra = abi.encode(_hash); 
+        if (r.op == Operation.CrosschainRequest) {
+            r.extra = abi.encode(_hash);
         }
         requestHashes.push(_hash);
         requests[_hash] = r;

@@ -7,13 +7,10 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 
 import {FBTC} from "../contracts/FBTC.sol";
 
-
 contract NewFBTC is FBTC {
-
     uint256 public value;
 
-    constructor(address _owner, address _bridge) FBTC(_owner, _bridge) {
-    }
+    constructor(address _owner, address _bridge) FBTC(_owner, _bridge) {}
 
     function setValue(uint256 v) external {
         value = v;
@@ -22,7 +19,8 @@ contract NewFBTC is FBTC {
     function getBridge() public view returns (address) {
         return bridge;
     }
-    function transfer(address, uint256) public override returns (bool){
+
+    function transfer(address, uint256) public override returns (bool) {
         revert("stop");
     }
 }
@@ -139,7 +137,10 @@ contract FBTCTest is Test {
 
         // Test proxy upgrade
         NewFBTC newImpl = new NewFBTC(OWNER, OWNER);
-        proxy.upgradeToAndCall(address(newImpl), abi.encodeCall(NewFBTC.setValue, (123)));
+        proxy.upgradeToAndCall(
+            address(newImpl),
+            abi.encodeCall(NewFBTC.setValue, (123))
+        );
 
         NewFBTC newProxy = NewFBTC(address(proxy));
         assertEq(newProxy.getBridge(), newProxy.bridge());

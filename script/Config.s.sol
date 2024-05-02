@@ -8,8 +8,11 @@ import {FireBridge} from "../contracts/FireBridge.sol";
 import {FBTCMinter, Operation} from "../contracts/Minter.sol";
 
 contract ConfigScript is BaseScript {
-
-    function addMinter(string memory chain, string memory tag, string memory minterTag) public {
+    function addMinter(
+        string memory chain,
+        string memory tag,
+        string memory minterTag
+    ) public {
         vm.createSelectFork(chain);
         vm.startBroadcast(deployerPrivateKey);
 
@@ -25,7 +28,11 @@ contract ConfigScript is BaseScript {
         vm.stopBroadcast();
     }
 
-    function addMerchaint(string memory chain, string memory tag, string memory merchantTag) public {
+    function addMerchaint(
+        string memory chain,
+        string memory tag,
+        string memory merchantTag
+    ) public {
         vm.createSelectFork(chain);
         vm.startBroadcast(deployerPrivateKey);
 
@@ -33,12 +40,7 @@ contract ConfigScript is BaseScript {
         MerchantConfig memory m = loadMerchantConfig(merchantTag);
 
         FireBridge bridge = FireBridge(c.bridge);
-        bridge.addQualifiedUser(
-            m.merchant,
-            m.deposit,
-            m.withdraw
-        );
+        bridge.addQualifiedUser(m.merchant, m.deposit, m.withdraw);
         vm.stopBroadcast();
     }
-
 }
