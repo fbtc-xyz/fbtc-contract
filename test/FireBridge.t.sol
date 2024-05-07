@@ -134,28 +134,34 @@ contract FireBridgeTest is Test {
     function testMint() public {
         (bytes32 _hash1, ) = bridge.addMintRequest(1000, TX_DATA1, 1);
         (bytes32 _hash2, ) = bridge.addMintRequest(1000, TX_DATA2, 1);
+        (bytes32 _hash3, ) = bridge.addMintRequest(1000, TX_DATA1, 1);
 
-        vm.expectRevert("Used BTC deposit tx");
-        bridge.addMintRequest(1000, TX_DATA1, 1);
-
+        // Test mint
         minter.confirmMintRequest(_hash1);
         Request memory r = bridge.getRequestByHash(_hash1);
 
         assertTrue(r.status == Status.Confirmed);
         assertEq(fbtc.balanceOf(OWNER), 1000);
 
+        // Can NOT add request with used BTC tx
+        vm.expectRevert("Used BTC deposit tx");
+        bridge.addMintRequest(1000, TX_DATA1, 1);
+
+        // Can NOT confirm request with used BTC tx
+        vm.expectRevert("Used BTC deposit tx");
+        minter.confirmMintRequest(_hash3);
+
+        // Can NOT confirm request twice.
         vm.expectRevert("Invalid request status");
         minter.confirmMintRequest(_hash1);
 
+        // Can NOT confirm rejected BTC tx
         bridge.blockDepositTx(TX_DATA2, 1);
 
-        vm.expectRevert("Invalid request status");
+        vm.expectRevert("Used BTC deposit tx");
         minter.confirmMintRequest(_hash2);
 
-        r = bridge.getRequestByHash(_hash1);
-        assertTrue(r.status == Status.Confirmed);
-        assertEq(fbtc.balanceOf(OWNER), 1000);
-
+        // Can NOT add request with blocked BTC tx
         bridge.blockDepositTx(TX_DATA2, 2);
         vm.expectRevert("Used BTC deposit tx");
         bridge.addMintRequest(1000, TX_DATA2, 2);

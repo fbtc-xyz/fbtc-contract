@@ -37,7 +37,6 @@ contract FireBridge is BridgeStorage, Governable {
 
     event RequestAdded(bytes32 indexed _hash, Operation indexed op, Request _r);
     event RequestConfirmed(bytes32 indexed _hash);
-    event RequestRejected(bytes32 indexed _hash);
 
     event FeePaid(address indexed _feeRecipient, uint256 indexed _feeAmount);
 
@@ -171,21 +170,13 @@ contract FireBridge is BridgeStorage, Governable {
         bytes32 _depositTxid,
         uint256 _outputIndex
     ) external onlyOwner {
-        bytes32 REJECTED = bytes32(uint256(1));
+        bytes32 REJECTED = bytes32(uint256(0xdead));
         bytes memory _depositTxData = abi.encode(_depositTxid, _outputIndex);
         bytes32 depositDataHash = keccak256(_depositTxData);
 
         bytes32 requestHash = usedDepositTxs[depositDataHash];
-        require(requestHash != REJECTED, "Already blocked");
+        require(requestHash == bytes32(0), "Already confirmed or blocked");
 
-        if (requestHash != bytes32(0)) {
-            // Update confirmation status.
-            Request storage r = requests[requestHash];
-            if (r.nonce > 0) {
-                r.status = Status.Rejected;
-                emit RequestRejected(requestHash);
-            }
-        }
         // Mark it as rejected.
         usedDepositTxs[depositDataHash] = REJECTED;
         emit DepositTxBlocked(_depositTxid, _outputIndex);
@@ -239,9 +230,6 @@ contract FireBridge is BridgeStorage, Governable {
 
         // Save request.
         _hash = _addRequest(_r);
-
-        // Update deposit data usage status.
-        usedDepositTxs[depositDataHash] = _hash;
     }
 
     /// @notice Initiate a FBTC burning request for the qualifiedUser.
@@ -343,6 +331,14 @@ contract FireBridge is BridgeStorage, Governable {
         uint256 _amount = r.amount;
         require(_amount > 0, "Invalid request amount");
         require(r.status == Status.Pending, "Invalid request status");
+
+        // Check and update deposit data usage status.
+        bytes32 depositDataHash = keccak256(r.extra);
+        require(
+            usedDepositTxs[depositDataHash] == bytes32(uint256(0)),
+            "Used BTC deposit tx"
+        );
+        usedDepositTxs[depositDataHash] = _hash;
 
         // Update status.
         r.status = Status.Confirmed;

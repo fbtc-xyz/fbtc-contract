@@ -64,3 +64,18 @@ else ifeq ($(chain), smnt)
 else
 	$(error Usage: make add_merchant chain=seth tag=dev merchant=dev1)
 endif
+
+set_fee:
+ifeq ($(chain), seth)
+	@forge script script/Config.s.sol \
+	-s `cast calldata "setupFee(string,string)" $(chain) $(tag)` \
+	--broadcast
+else ifeq ($(chain), smnt)
+	@forge script script/Config.s.sol \
+	-s `cast calldata "setupFee(string,string)" $(chain) $(tag)` \
+	--gas-estimate-multiplier 100000000 \
+	--broadcast \
+	--slow
+else
+	$(error Usage: make set_fee chain=seth tag=dev)
+endif
