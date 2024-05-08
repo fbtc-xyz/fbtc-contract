@@ -2,19 +2,15 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {Request} from "./Common.sol";
+import {Request, UserInfo} from "./Common.sol";
 
 contract BridgeStorage {
-    EnumerableSet.AddressSet internal qualifiedUsers;
-
     address public minter;
     address public fbtc;
 
-    mapping(address qualifiedUser => string depositAddress)
-        public depositAddresses;
-    mapping(address qualifiedUser => string withdrawalAddress)
-        public withdrawalAddresses;
+    EnumerableSet.AddressSet internal qualifiedUsers;
 
+    mapping(address qualifiedUser => UserInfo info) public userInfo;
     mapping(string depositAddress => address qualifiedUser)
         public depositAddressToUser; // For uniqueness check
 

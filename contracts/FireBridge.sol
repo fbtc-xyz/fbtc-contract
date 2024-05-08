@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-import {Request, RequestLib, Operation, Status, ChainCode} from "./Common.sol";
+import {Request, UserInfo, RequestLib, Operation, Status, ChainCode} from "./Common.sol";
 import {BridgeStorage} from "./BridgeStorage.sol";
 import {FToken} from "./FToken.sol";
 import {Governable} from "./Governable.sol";
@@ -23,6 +23,8 @@ contract FireBridge is BridgeStorage, Governable {
         string _depositAddress,
         string _withdrawalAddress
     );
+    event QualifiedUserLocked(address indexed _user);
+    event QualifiedUserUnlocked(address indexed _user);
 
     event QualifiedUserRemoved(address indexed _user);
 
@@ -45,11 +47,9 @@ contract FireBridge is BridgeStorage, Governable {
         _;
     }
 
-    modifier onlyQualifiedUser() {
-        require(
-            qualifiedUsers.contains(msg.sender),
-            "Caller not qualifiedUser"
-        );
+    modifier onlyActiveQualifiedUser() {
+        require(isQualifiedUser(msg.sender), "Caller not qualified");
+        require(!userInfo[msg.sender].locked, "Caller locked");
         _;
     }
 
@@ -100,6 +100,8 @@ contract FireBridge is BridgeStorage, Governable {
     }
 
     /// Owner methods.
+
+    /// Qualified user management.
     function addQualifiedUser(
         address _user,
         string calldata _depositAddress,
@@ -110,8 +112,7 @@ contract FireBridge is BridgeStorage, Governable {
             depositAddressToUser[_depositAddress] == address(0),
             "Deposit address used"
         );
-        depositAddresses[_user] = _depositAddress;
-        withdrawalAddresses[_user] = _withdrawalAddress;
+        userInfo[_user] = UserInfo(false, _depositAddress, _withdrawalAddress);
         depositAddressToUser[_depositAddress] = _user;
         emit QualifiedUserAdded(_user, _depositAddress, _withdrawalAddress);
     }
@@ -122,29 +123,49 @@ contract FireBridge is BridgeStorage, Governable {
         string calldata _withdrawalAddress
     ) external onlyOwner {
         require(isQualifiedUser(_user), "User not qualified");
-        require(
-            depositAddressToUser[_depositAddress] == address(0),
-            "Deposit address used"
-        );
+        require(!userInfo[_user].locked, "User locked");
 
-        string memory _oldDepositAddress = depositAddresses[_user];
-        delete depositAddressToUser[_oldDepositAddress];
+        string memory _oldDepositAddress = userInfo[_user].depositAddress;
+        if (
+            keccak256(bytes(_depositAddress)) !=
+            keccak256(bytes(_oldDepositAddress))
+        ) {
+            require(
+                depositAddressToUser[_depositAddress] == address(0),
+                "Deposit address used"
+            );
+            delete depositAddressToUser[_oldDepositAddress];
+            userInfo[_user].depositAddress = _depositAddress;
+            depositAddressToUser[_depositAddress] = _user;
+        }
 
-        depositAddresses[_user] = _depositAddress;
-        withdrawalAddresses[_user] = _withdrawalAddress;
-        depositAddressToUser[_depositAddress] = _user;
+        userInfo[_user].withdrawalAddress = _withdrawalAddress;
         emit QualifiedUserEdited(_user, _depositAddress, _withdrawalAddress);
     }
 
     function removeQualifiedUser(address _qualifiedUser) external onlyOwner {
-        qualifiedUsers.remove(_qualifiedUser);
-        string memory _depositAddress = depositAddresses[_qualifiedUser];
+        require(qualifiedUsers.remove(_qualifiedUser), "User not qualified");
+        string memory _depositAddress = userInfo[_qualifiedUser].depositAddress;
         delete depositAddressToUser[_depositAddress];
-        delete depositAddresses[_qualifiedUser];
-        delete withdrawalAddresses[_qualifiedUser];
+        delete userInfo[_qualifiedUser];
         emit QualifiedUserRemoved(_qualifiedUser);
     }
 
+    function lockQualifiedUser(address _qualifiedUser) external onlyOwner {
+        require(isQualifiedUser(_qualifiedUser), "User not qualified");
+        require(!userInfo[_qualifiedUser].locked, "User already locked");
+        userInfo[_qualifiedUser].locked = true;
+        emit QualifiedUserLocked(_qualifiedUser);
+    }
+
+    function unlockQualifiedUser(address _qualifiedUser) external onlyOwner {
+        require(isQualifiedUser(_qualifiedUser), "User not qualified");
+        require(userInfo[_qualifiedUser].locked, "User not locked");
+        userInfo[_qualifiedUser].locked = false;
+        emit QualifiedUserUnlocked(_qualifiedUser);
+    }
+
+    /// Protocol configuration.
     function setToken(address _token) external onlyOwner {
         fbtc = _token;
         emit TokenSet(_token);
@@ -196,7 +217,7 @@ contract FireBridge is BridgeStorage, Governable {
         uint256 _outputIndex
     )
         external
-        onlyQualifiedUser
+        onlyActiveQualifiedUser
         whenNotPaused
         returns (bytes32 _hash, Request memory _r)
     {
@@ -216,7 +237,7 @@ contract FireBridge is BridgeStorage, Governable {
             nonce: nonce(),
             op: Operation.Mint,
             srcChain: MAIN_CHAIN,
-            srcAddress: bytes(depositAddresses[msg.sender]),
+            srcAddress: bytes(userInfo[msg.sender].depositAddress),
             dstChain: chain(),
             dstAddress: abi.encode(msg.sender),
             amount: _amount,
@@ -240,7 +261,7 @@ contract FireBridge is BridgeStorage, Governable {
         uint256 _amount
     )
         external
-        onlyQualifiedUser
+        onlyActiveQualifiedUser
         whenNotPaused
         returns (bytes32 _hash, Request memory _r)
     {
@@ -254,7 +275,7 @@ contract FireBridge is BridgeStorage, Governable {
             srcChain: chain(),
             srcAddress: abi.encode(msg.sender),
             dstChain: MAIN_CHAIN,
-            dstAddress: bytes(withdrawalAddresses[msg.sender]),
+            dstAddress: bytes(userInfo[msg.sender].withdrawalAddress),
             amount: _amount,
             fee: 0, // To be set in `_splitFeeAndUpdate`
             extra: "", // Unset until confirmed
@@ -275,15 +296,18 @@ contract FireBridge is BridgeStorage, Governable {
     }
 
     /// Customer methods.
+
     /// @notice Initiate a FBTC cross-chain bridging request.
-    /// @param _amount The amount of FBTC to burn.
+    /// @param _targetChain The target chain identifier.
+    /// @param _targetAddress The encoded address on the target chain .
+    /// @param _amount The amount of FBTC to cross-chain.
     /// @return _hash The hash of the new created request.
     /// @return _r The full new created request.
     function addCrosschainRequest(
         bytes32 _targetChain,
-        bytes calldata _targetAddress,
+        bytes memory _targetAddress,
         uint256 _amount
-    ) external whenNotPaused returns (bytes32 _hash, Request memory _r) {
+    ) public whenNotPaused returns (bytes32 _hash, Request memory _r) {
         // Check request.
         require(_amount > 0, "Invalid amount");
 
@@ -315,6 +339,26 @@ contract FireBridge is BridgeStorage, Governable {
 
         // Burn tokens.
         FToken(fbtc).burn(msg.sender, _r.amount);
+    }
+
+    /// @notice A more user-friendly interface to cross-chain to an
+    ///         EVM-compatible target chain.
+    /// @param _targetChainId The chain id of target EVM chain.
+    /// @param _targetAddress The target EVM address.
+    /// @param _amount The amount of FBTC to cross-chain.
+    /// @return _hash The hash of the new created request.
+    /// @return _r The full new created request.
+    function addEVMCrosschainRequest(
+        uint256 _targetChainId,
+        address _targetAddress,
+        uint256 _amount
+    ) external returns (bytes32 _hash, Request memory _r) {
+        return
+            addCrosschainRequest(
+                bytes32(_targetChainId),
+                abi.encode(_targetAddress),
+                _amount
+            );
     }
 
     /// Minter methods.
@@ -416,6 +460,16 @@ contract FireBridge is BridgeStorage, Governable {
         );
         require(r.status == Status.Unused, "Status should not be used");
 
+        require(r.extra.length == 32, "Invalid extra: not valid bytes32");
+        require(
+            r.dstAddress.length == 32,
+            "Invalid dstAddress: not 32 bytes length"
+        );
+        require(
+            abi.decode(r.dstAddress, (uint256)) <= type(uint160).max,
+            "Invalid dstAddress: not address"
+        );
+
         bytes32 srcHash = abi.decode(r.extra, (bytes32));
 
         // Set to request to calc hash.
@@ -456,9 +510,42 @@ contract FireBridge is BridgeStorage, Governable {
         return qualifiedUsers.contains(_user);
     }
 
+    /// @notice Check whether the address is qualified and active
+    function isActiveUser(address _user) public view returns (bool) {
+        return isQualifiedUser(_user) && !userInfo[_user].locked;
+    }
+
     /// @notice Get all qualified users
     function getQualifiedUsers() external view returns (address[] memory) {
         return qualifiedUsers.values();
+    }
+
+    /// @notice Get all active users
+    function getActiveUsers() external view returns (address[] memory _users) {
+        uint256 activeCount = 0;
+        for (uint256 i = 0; i < qualifiedUsers.length(); ++i) {
+            UserInfo storage info = userInfo[qualifiedUsers.at(i)];
+            if (!info.locked) {
+                activeCount += 1;
+            }
+        }
+
+        _users = new address[](activeCount);
+        uint256 j = 0;
+        for (uint256 i = 0; i < qualifiedUsers.length(); ++i) {
+            address _user = qualifiedUsers.at(i);
+            UserInfo storage info = userInfo[_user];
+            if (!info.locked) {
+                _users[j++] = _user;
+            }
+        }
+    }
+
+    /// @notice Get qualified user information.
+    function getQualifiedUserInfo(
+        address _user
+    ) external view returns (UserInfo memory info) {
+        info = userInfo[_user];
     }
 
     /// @notice Get request by the index a.k.a the id.

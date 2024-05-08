@@ -3,10 +3,10 @@ pragma solidity ^0.8.20;
 
 import {Test, console2 as console} from "forge-std/Test.sol";
 import {FBTC} from "../contracts/FBTC.sol";
-import {FBTCMinter, FireBridge} from "../contracts/Minter.sol";
+import {FBTCMinter, FireBridge} from "../contracts/FBTCMinter.sol";
 import {FeeModel} from "../contracts/FeeModel.sol";
 
-import {Operation, Request, RequestLib, ChainCode, Status} from "../contracts/Common.sol";
+import {Operation, Request, UserInfo, RequestLib, ChainCode, Status} from "../contracts/Common.sol";
 
 contract FireBridgeTest is Test {
     using RequestLib for Request;
@@ -44,26 +44,57 @@ contract FireBridgeTest is Test {
         minter = new FBTCMinter(OWNER, address(bridge));
         bridge.setMinter(address(minter));
 
-        minter.addOperator(Operation.Mint, OWNER);
-        minter.addOperator(Operation.Burn, OWNER);
-        minter.addOperator(Operation.CrosschainConfirm, OWNER);
+        minter.grantRole(minter.MINT_ROLE(), OWNER);
+        minter.grantRole(minter.BURN_ROLE(), OWNER);
+        minter.grantRole(minter.CROSSCHAIN_ROLE(), OWNER);
     }
 
-    function testQualifiedUser() public {
+    function testQualifiedUser1() public {
         assertFalse(bridge.isQualifiedUser(ONE));
-        assertEq(bridge.depositAddresses(ONE), "");
-        assertEq(bridge.withdrawalAddresses(ONE), "");
 
         bridge.addQualifiedUser(ONE, BTC_ADDR2, BTC_ADDR1);
 
         assertTrue(bridge.isQualifiedUser(ONE));
-        assertEq(bridge.depositAddresses(ONE), BTC_ADDR2);
-        assertEq(bridge.withdrawalAddresses(ONE), BTC_ADDR1);
+        UserInfo memory info = bridge.getQualifiedUserInfo(ONE);
+        assertEq(info.locked, false);
+        assertEq(info.depositAddress, BTC_ADDR2);
+        assertEq(info.withdrawalAddress, BTC_ADDR1);
+
+        address[] memory _users = bridge.getQualifiedUsers();
+        assertEq(_users.length, 2);
+        assertEq(_users[0], OWNER);
+        assertEq(_users[1], ONE);
+
+        _users = bridge.getActiveUsers();
+        assertEq(_users.length, 2);
+        assertEq(_users[0], OWNER);
+        assertEq(_users[1], ONE);
+
+        bridge.lockQualifiedUser(ONE);
+        assertFalse(bridge.isActiveUser(ONE));
+
+        _users = bridge.getActiveUsers();
+        assertEq(_users.length, 1);
+        assertEq(_users[0], OWNER);
+
+        bridge.unlockQualifiedUser(ONE);
+        assertTrue(bridge.isActiveUser(ONE));
 
         bridge.removeQualifiedUser(ONE);
         assertFalse(bridge.isQualifiedUser(ONE));
-        assertEq(bridge.depositAddresses(ONE), "");
-        assertEq(bridge.withdrawalAddresses(ONE), "");
+    }
+
+    function testQualifiedUser2() public {
+        vm.prank(ONE);
+        vm.expectRevert("Caller not qualified");
+        bridge.addMintRequest(1000, TX_DATA1, 1);
+
+        bridge.lockQualifiedUser(OWNER);
+        vm.expectRevert("Caller locked");
+        bridge.addMintRequest(1000, TX_DATA1, 1);
+
+        bridge.unlockQualifiedUser(OWNER);
+        bridge.addMintRequest(1000, TX_DATA1, 1);
     }
 
     function testRequest() public {
@@ -86,7 +117,10 @@ contract FireBridgeTest is Test {
         assertEq(r.dstAddress, abi.encode(OWNER));
         assertEq(r.amount, 1000);
         assertEq(r.srcChain, ChainCode.BTC);
-        assertEq(r.srcAddress, bytes(bridge.depositAddresses(OWNER)));
+        assertEq(
+            r.srcAddress,
+            bytes(bridge.getQualifiedUserInfo(OWNER).depositAddress)
+        );
         assertEq(r.extra, abi.encode(TX_DATA1, 1));
         assertTrue(r.status == Status.Pending);
 
@@ -100,7 +134,10 @@ contract FireBridgeTest is Test {
         assertEq(r.srcAddress, abi.encode(OWNER));
         assertEq(r.amount, 500);
         assertEq(r.dstChain, ChainCode.BTC);
-        assertEq(r.dstAddress, bytes(bridge.withdrawalAddresses(OWNER)));
+        assertEq(
+            r.dstAddress,
+            bytes(bridge.getQualifiedUserInfo(OWNER).withdrawalAddress)
+        );
         assertEq(r.extra, "");
         assertTrue(r.status == Status.Pending);
 
@@ -205,15 +242,15 @@ contract FireBridgeTest is Test {
         vm.chainId(backup);
     }
 
-    function testBridge() public {
+    function testCrosschain() public {
         (bytes32 _hash, ) = bridge.addMintRequest(1000, TX_DATA1, 1);
         assertEq(fbtc.balanceOf(OWNER), 0);
         minter.confirmMintRequest(_hash);
         assertEq(fbtc.balanceOf(OWNER), 1000);
 
-        (_hash, ) = bridge.addCrosschainRequest(
-            DST_CHAIN1,
-            abi.encode(ONE),
+        (_hash, ) = bridge.addEVMCrosschainRequest(
+            uint256(DST_CHAIN1),
+            ONE,
             500
         );
         assertEq(fbtc.balanceOf(OWNER), 500, "owner token incorrect");
@@ -232,9 +269,9 @@ contract FireBridgeTest is Test {
             abi.encode(ONE),
             10
         );
-        (bytes32 _hash3, ) = bridge.addCrosschainRequest(
-            DST_CHAIN3,
-            abi.encode(ONE),
+        (bytes32 _hash3, ) = bridge.addEVMCrosschainRequest(
+            uint256(DST_CHAIN3),
+            ONE,
             10
         );
 

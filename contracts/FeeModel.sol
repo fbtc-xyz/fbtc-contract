@@ -14,8 +14,9 @@ contract FeeModel is Ownable {
         uint256 minFee;
     }
 
-    mapping(Operation op => FeeConfig cfg) defaultFeeConfig;
-    mapping(Operation op => mapping(bytes32 dstChain => FeeConfig cfg)) chainFeeConfig;
+    mapping(Operation op => FeeConfig cfg) public defaultFeeConfig;
+    mapping(Operation op => mapping(bytes32 dstChain => FeeConfig cfg))
+        public chainFeeConfig;
 
     event DefaultFeeConfigSet(Operation indexed _op, FeeConfig _config);
     event ChainFeeConfigSet(

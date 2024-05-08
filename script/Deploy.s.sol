@@ -5,18 +5,17 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 
 import {BaseScript, stdJson, console} from "./Base.sol";
 
+import {Operation} from "../contracts/Common.sol";
 import {FBTC} from "../contracts/FBTC.sol";
 import {FireBridge, ChainCode} from "../contracts/FireBridge.sol";
-import {FBTCMinter, Operation} from "../contracts/Minter.sol";
+import {FBTCMinter} from "../contracts/FBTCMinter.sol";
 import {FeeModel} from "../contracts/FeeModel.sol";
-import {FBTCGovernor} from "../contracts/FBTCGovernor.sol";
 
 contract DeployScript is BaseScript {
     FBTCMinter public minter;
     FireBridge public bridge;
     FBTC public fbtc;
     FeeModel public feeModel;
-    FBTCGovernor public gov;
 
     using stdJson for string;
 
@@ -50,15 +49,6 @@ contract DeployScript is BaseScript {
 
         minter = new FBTCMinter(owner, address(bridge));
         bridge.setMinter(address(minter));
-
-        // gov = new FBTCGovernor(owner);
-        // gov.setFBTC(address(fbtc));
-        // gov.setBridge(address(bridge));
-        // fbtc.transferOwnership(address(gov));
-        // bridge.transferOwnership(address(gov));
-
-        // gov.execTransaction(address(fbtc), 0, abi.encodeCall(fbtc.acceptOwnership, ()));
-        // gov.execTransaction(address(bridge), 0, abi.encodeCall(bridge.acceptOwnership, ()));
 
         vm.stopBroadcast();
 

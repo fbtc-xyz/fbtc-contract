@@ -1,40 +1,21 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 pragma solidity ^0.8.20;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Operation, Request} from "./Common.sol";
+import {Request} from "./Common.sol";
 import {FireBridge} from "./FireBridge.sol";
+import {RoleBasedAccessControl, Ownable} from "./RoleBasedAccessControl.sol";
 
-contract FBTCMinter is Ownable {
+contract FBTCMinter is RoleBasedAccessControl {
     FireBridge public bridge;
 
-    mapping(address _operator => mapping(Operation _op => bool _status))
-        public roles;
+    bytes32 public constant MINT_ROLE = "minter.confirm_mint";
+    bytes32 public constant BURN_ROLE = "minter.confirm_burn";
+    bytes32 public constant CROSSCHAIN_ROLE = "minter.confirm_crosschain";
 
-    event OperatorAdded(Operation indexed _op, address indexed _operator);
-    event OperatorRemoved(Operation indexed _op, address indexed _operator);
     event BridgeUpdated(address indexed newBridge, address indexed oldBridge);
-
-    modifier onlyRole(Operation _op) {
-        require(roles[msg.sender][_op], "Invalid role of caller");
-        _;
-    }
 
     constructor(address _owner, address _bridge) Ownable(_owner) {
         bridge = FireBridge(_bridge);
-    }
-
-    function addOperator(Operation _op, address _operator) external onlyOwner {
-        roles[_operator][_op] = true;
-        emit OperatorAdded(_op, _operator);
-    }
-
-    function removeOperator(
-        Operation _op,
-        address _operator
-    ) external onlyOwner {
-        roles[_operator][_op] = false;
-        emit OperatorRemoved(_op, _operator);
     }
 
     function setBridge(address _bridge) external onlyOwner {
@@ -45,9 +26,7 @@ contract FBTCMinter is Ownable {
 
     /// Operator methods.
 
-    function confirmMintRequest(
-        bytes32 _hash
-    ) external onlyRole(Operation.Mint) {
+    function confirmMintRequest(bytes32 _hash) external onlyRole(MINT_ROLE) {
         bridge.confirmMintRequest(_hash);
     }
 
@@ -55,7 +34,7 @@ contract FBTCMinter is Ownable {
         bytes32 _hash,
         bytes32 _withdrawalTxid,
         uint256 _outputIndex
-    ) external onlyRole(Operation.Burn) {
+    ) external onlyRole(BURN_ROLE) {
         bridge.confirmBurnRequest(_hash, _withdrawalTxid, _outputIndex);
     }
 
@@ -63,7 +42,7 @@ contract FBTCMinter is Ownable {
         Request calldata r
     )
         external
-        onlyRole(Operation.CrosschainConfirm)
+        onlyRole(CROSSCHAIN_ROLE)
         returns (bytes32 _hash, Request memory _r)
     {
         (_hash, _r) = bridge.confirmCrosschainRequest(r);
@@ -71,7 +50,7 @@ contract FBTCMinter is Ownable {
 
     function batchConfirmCrosschainRequest(
         Request[] calldata rs
-    ) external onlyRole(Operation.CrosschainConfirm) {
+    ) external onlyRole(CROSSCHAIN_ROLE) {
         for (uint256 i = 0; i < rs.length; i++) {
             bridge.confirmCrosschainRequest(rs[i]);
         }

@@ -3,9 +3,10 @@ pragma solidity ^0.8.13;
 
 import {BaseScript, stdJson, console} from "./Base.sol";
 
+import {Operation} from "../contracts/Common.sol";
 import {FBTC} from "../contracts/FBTC.sol";
 import {FireBridge} from "../contracts/FireBridge.sol";
-import {FBTCMinter, Operation} from "../contracts/Minter.sol";
+import {FBTCMinter} from "../contracts/FBTCMinter.sol";
 import {FeeModel} from "../contracts/FeeModel.sol";
 
 contract ConfigScript is BaseScript {
@@ -22,9 +23,9 @@ contract ConfigScript is BaseScript {
 
         FBTCMinter minter = FBTCMinter(c.minter);
 
-        minter.addOperator(Operation.Mint, m.opMint);
-        minter.addOperator(Operation.Burn, m.opBurn);
-        minter.addOperator(Operation.CrosschainConfirm, m.opCross);
+        minter.grantRole(minter.MINT_ROLE(), m.opMint);
+        minter.grantRole(minter.BURN_ROLE(), m.opBurn);
+        minter.grantRole(minter.CROSSCHAIN_ROLE(), m.opCross);
 
         vm.stopBroadcast();
     }
@@ -58,7 +59,7 @@ contract ConfigScript is BaseScript {
         fee.setDefaultFeeConfig(
             Operation.Burn,
             FeeModel.FeeConfig(
-                false,
+                true,
                 fee.FEE_RATE_BASE() / 1000, // 0.1%
                 0.003 * 1e8 // 0.003 FBTC
             )
@@ -66,7 +67,7 @@ contract ConfigScript is BaseScript {
         fee.setDefaultFeeConfig(
             Operation.CrosschainRequest,
             FeeModel.FeeConfig(
-                false,
+                true,
                 fee.FEE_RATE_BASE() / 10000, // 0.01%
                 0.0001 * 1e8 // 0.0001 FBTC
             )

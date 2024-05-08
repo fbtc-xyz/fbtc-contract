@@ -29,6 +29,12 @@ struct Request {
     bytes extra;
 }
 
+struct UserInfo {
+    bool locked;
+    string depositAddress;
+    string withdrawalAddress;
+}
+
 library ChainCode {
     // For EVM chains, the chain code is chain id in bytes32 format.
     bytes32 constant ETH =

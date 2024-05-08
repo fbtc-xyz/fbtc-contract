@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {FBTC} from "../contracts/FBTC.sol";
-import {FBTCMinter, Operation} from "../contracts/Minter.sol";
+import {FBTCMinter} from "../contracts/FBTCMinter.sol";
 import {FeeModel} from "../contracts/FeeModel.sol";
 import {FireBridge, ChainCode} from "../contracts/FireBridge.sol";
 
@@ -37,21 +37,28 @@ contract MinterTest is Test {
     }
 
     function testOperator() public {
-        assertFalse(minter.roles(OWNER, Operation.Mint));
-        assertFalse(minter.roles(OWNER, Operation.Burn));
+        bytes32 MINT_ROLE = minter.MINT_ROLE();
+        bytes32 BURN_ROLE = minter.BURN_ROLE();
+        assertFalse(minter.hasRole(MINT_ROLE, OWNER));
+        assertFalse(minter.hasRole(BURN_ROLE, OWNER));
 
-        minter.addOperator(Operation.Mint, OWNER);
-        assertTrue(minter.roles(OWNER, Operation.Mint));
-        assertFalse(minter.roles(OWNER, Operation.Burn));
+        minter.grantRole(MINT_ROLE, OWNER);
+        assertTrue(minter.hasRole(MINT_ROLE, OWNER));
+        assertFalse(minter.hasRole(BURN_ROLE, OWNER));
 
-        minter.addOperator(Operation.Mint, ONE);
-        assertTrue(minter.roles(ONE, Operation.Mint));
+        minter.grantRole(MINT_ROLE, ONE);
+        assertTrue(minter.hasRole(MINT_ROLE, ONE));
 
-        minter.addOperator(Operation.Burn, OWNER);
-        assertTrue(minter.roles(OWNER, Operation.Burn));
+        minter.grantRole(BURN_ROLE, OWNER);
+        assertTrue(minter.hasRole(BURN_ROLE, OWNER));
 
-        minter.removeOperator(Operation.Burn, OWNER);
-        assertFalse(minter.roles(OWNER, Operation.Burn));
+        address[] memory members = minter.getRoleMembers(MINT_ROLE);
+        assertEq(members.length, 2);
+        assertEq(members[0], OWNER);
+        assertEq(members[1], ONE);
+
+        minter.revokeRole(BURN_ROLE, OWNER);
+        assertFalse(minter.hasRole(BURN_ROLE, OWNER));
     }
 
     function testMint() public {
@@ -60,14 +67,14 @@ contract MinterTest is Test {
         (bytes32 _hash1, ) = bridge.addMintRequest(1000, "FakeTx", 1);
         (bytes32 _hash2, ) = bridge.addMintRequest(1000, "FakeTx2", 1);
 
-        minter.addOperator(Operation.Mint, OWNER);
+        minter.grantRole(minter.MINT_ROLE(), OWNER);
 
         minter.confirmMintRequest(_hash1);
 
         assertEq(fbtc.balanceOf(OWNER), 1000);
 
-        minter.removeOperator(Operation.Mint, OWNER);
-        vm.expectRevert("Invalid role of caller");
+        minter.revokeRole(minter.MINT_ROLE(), OWNER);
+        vm.expectRevert("Unauthorized role member");
         minter.confirmMintRequest(_hash2);
     }
 }
