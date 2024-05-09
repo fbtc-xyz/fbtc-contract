@@ -8,9 +8,9 @@ import {RoleBasedAccessControl, Ownable} from "./RoleBasedAccessControl.sol";
 contract FBTCMinter is RoleBasedAccessControl {
     FireBridge public bridge;
 
-    bytes32 public constant MINT_ROLE = "minter.confirm_mint";
-    bytes32 public constant BURN_ROLE = "minter.confirm_burn";
-    bytes32 public constant CROSSCHAIN_ROLE = "minter.confirm_crosschain";
+    bytes32 public constant MINT_ROLE = "1_mint";
+    bytes32 public constant BURN_ROLE = "2_burn";
+    bytes32 public constant CROSSCHAIN_ROLE = "3_crosschain";
 
     event BridgeUpdated(address indexed newBridge, address indexed oldBridge);
 

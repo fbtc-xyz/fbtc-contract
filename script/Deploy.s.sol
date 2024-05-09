@@ -10,6 +10,7 @@ import {FBTC} from "../contracts/FBTC.sol";
 import {FireBridge, ChainCode} from "../contracts/FireBridge.sol";
 import {FBTCMinter} from "../contracts/FBTCMinter.sol";
 import {FeeModel} from "../contracts/FeeModel.sol";
+import {FBTCGovernorModule} from "../contracts/FBTCGovernorModule.sol";
 
 contract DeployScript is BaseScript {
     FBTCMinter public minter;
@@ -49,6 +50,8 @@ contract DeployScript is BaseScript {
 
         minter = new FBTCMinter(owner, address(bridge));
         bridge.setMinter(address(minter));
+
+        new FBTCGovernorModule(owner, address(bridge), address(fbtc));
 
         vm.stopBroadcast();
 

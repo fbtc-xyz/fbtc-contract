@@ -23,10 +23,10 @@ interface ISafe {
 }
 
 contract FBTCGovernorModule is RoleBasedAccessControl {
-    bytes32 public constant FBTC_PAUSER_ROLE = "fbtc.pauser";
-    bytes32 public constant LOCKER_ROLE = "fbtc.locker";
-    bytes32 public constant BRIDGE_PAUSER_ROLE = "bridge.pauser";
-    bytes32 public constant USER_MANAGER_ROLE = "bridge.user_manager";
+    bytes32 public constant FBTC_PAUSER_ROLE = "1_fbtc_pauser";
+    bytes32 public constant LOCKER_ROLE = "2_fbtc_locker";
+    bytes32 public constant BRIDGE_PAUSER_ROLE = "3_bridge_pauser";
+    bytes32 public constant USER_MANAGER_ROLE = "4_bridge_user_manager";
 
     FBTC public fbtc;
     FireBridge public bridge;
