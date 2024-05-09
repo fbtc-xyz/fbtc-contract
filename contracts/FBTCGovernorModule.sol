@@ -24,9 +24,9 @@ interface ISafe {
 
 contract FBTCGovernorModule is RoleBasedAccessControl {
     bytes32 public constant FBTC_PAUSER_ROLE = "fbtc.pauser";
-    bytes32 public constant LOCKER_RULE = "fbtc.locker";
-    bytes32 public constant BRIDGE_PAUSER_RULE = "bridge.pauser";
-    bytes32 public constant USER_MANAGER_RULE = "bridge.user_manager";
+    bytes32 public constant LOCKER_ROLE = "fbtc.locker";
+    bytes32 public constant BRIDGE_PAUSER_ROLE = "bridge.pauser";
+    bytes32 public constant USER_MANAGER_ROLE = "bridge.user_manager";
 
     FBTC public fbtc;
     FireBridge public bridge;
@@ -75,7 +75,7 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
 
     function lockUserFBTCTransfer(
         address _user
-    ) external onlyRole(LOCKER_RULE) {
+    ) external onlyRole(LOCKER_ROLE) {
         _call(address(fbtc), abi.encodeCall(fbtc.lockUser, (_user)));
     }
 
@@ -83,7 +83,7 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
         _call(address(fbtc), abi.encodeCall(fbtc.pause, ()));
     }
 
-    function pauseBridge() external onlyRole(BRIDGE_PAUSER_RULE) {
+    function pauseBridge() external onlyRole(BRIDGE_PAUSER_ROLE) {
         _call(address(bridge), abi.encodeCall(bridge.pause, ()));
     }
 
@@ -91,7 +91,7 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
         address _qualifiedUser,
         string calldata _depositAddress,
         string calldata _withdrawalAddress
-    ) external onlyRole(USER_MANAGER_RULE) {
+    ) external onlyRole(USER_MANAGER_ROLE) {
         _call(
             address(bridge),
             abi.encodeCall(
@@ -103,7 +103,7 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
 
     function lockQualifiedUser(
         address _qualifiedUser
-    ) external onlyRole(USER_MANAGER_RULE) {
+    ) external onlyRole(USER_MANAGER_ROLE) {
         _call(
             address(bridge),
             abi.encodeCall(bridge.lockQualifiedUser, (_qualifiedUser))

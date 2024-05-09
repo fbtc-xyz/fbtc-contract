@@ -177,11 +177,13 @@ contract FireBridge is BridgeStorage, Governable {
     }
 
     function setFeeModel(address _feeModel) external onlyOwner {
+        require(_feeModel != address(0), "Invalid feeModel");
         feeModel = _feeModel;
         emit FeeModelSet(_feeModel);
     }
 
     function setFeeRecipient(address _feeRecipient) external onlyOwner {
+        require(_feeRecipient != address(0), "Invalid feeRecipient");
         feeRecipient = _feeRecipient;
         emit FeeRecipientSet(_feeRecipient);
     }
