@@ -15,14 +15,15 @@ deploy:
 ifeq ($(chain), seth)
 	@forge script script/Deploy.s.sol \
 	--tc DeployScript \
-	-s `cast calldata "deploy(string,string,bool)" $(chain) $(tag) $(xtn)` \
+	-s `cast calldata "deploy2(string,string,bool)" $(chain) $(tag) $(xtn)` \
 	--private-key $(PRIVATE_KEY) \
 	--verify \
+	--verifier-url https://api-sepolia.etherscan.io/api? \
 	--broadcast
 else ifeq ($(chain), smnt)
 	@forge script script/Deploy.s.sol \
 	--tc DeployScript \
-	-s `cast calldata "deploy(string,string,bool)" $(chain) $(tag) $(xtn)` \
+	-s `cast calldata "deploy2(string,string,bool)" $(chain) $(tag) $(xtn)` \
 	--skip test \
 	--gas-estimate-multiplier 10000000 \
 	--private-key $(PRIVATE_KEY) \

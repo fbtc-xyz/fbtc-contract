@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 pragma solidity ^0.8.20;
 
+import {Operation, ChainCode} from "./Common.sol";
 import {FBTC} from "./FBTC.sol";
 import {FireBridge} from "./FireBridge.sol";
+import {FeeModel} from "./FeeModel.sol";
 import {RoleBasedAccessControl, Ownable} from "./RoleBasedAccessControl.sol";
 
 contract Enum {
@@ -27,9 +29,12 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
     bytes32 public constant LOCKER_ROLE = "2_fbtc_locker";
     bytes32 public constant BRIDGE_PAUSER_ROLE = "3_bridge_pauser";
     bytes32 public constant USER_MANAGER_ROLE = "4_bridge_user_manager";
+    bytes32 public constant CHAIN_MANAGER_ROLE = "5_bridge_chain_manager";
+    bytes32 public constant FEE_UPDATER_ROLE = "6_bridge_fee_updater";
 
     FBTC public fbtc;
     FireBridge public bridge;
+    FeeModel public fee;
 
     event FBTCSet(address indexed _fbtc);
     event BridgeSet(address indexed _bridge);
@@ -37,10 +42,12 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
     constructor(
         address _owner,
         address _bridge,
-        address _fbtc
+        address _fbtc,
+        address _fee
     ) Ownable(_owner) {
         bridge = FireBridge(_bridge);
         fbtc = FBTC(_fbtc);
+        fee = FeeModel(_fee);
     }
 
     function _call(address _to, bytes memory _data) internal {
@@ -108,5 +115,32 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
             address(bridge),
             abi.encodeCall(bridge.lockQualifiedUser, (_qualifiedUser))
         );
+    }
+
+    function addDstChains(
+        bytes32[] memory _dstChains
+    ) external onlyRole(CHAIN_MANAGER_ROLE) {
+        bridge.addDstChains(_dstChains);
+    }
+
+    function removeDstChains(
+        bytes32[] memory _dstChains
+    ) external onlyRole(CHAIN_MANAGER_ROLE) {
+        bridge.removeDstChains(_dstChains);
+    }
+
+    function updateETHCrossChainMinFee(
+        uint256 _minFee
+    ) external onlyRole(FEE_UPDATER_ROLE) {
+        require(
+            _minFee <= 0.01 * 1e8,
+            "Min fee should be lower than 0.01 FBTC"
+        );
+        Operation op = Operation.CrosschainRequest;
+        bytes32 chain = ChainCode.ETH;
+
+        FeeModel.FeeConfig memory config = fee.getChainFeeConfig(op, chain);
+        config.minFee = _minFee;
+        fee.setChainFeeConfig(op, chain, config);
     }
 }

@@ -21,13 +21,13 @@ abstract contract RoleBasedAccessControl is Ownable {
     }
 
     function _grantRole(bytes32 role, address account) internal {
-        if(_roleMembers[role].add(account)){
+        if (_roleMembers[role].add(account)) {
             emit RoleGranted(role, account);
         }
     }
 
     function _revokeRole(bytes32 role, address account) internal {
-        if(_roleMembers[role].remove(account)){
+        if (_roleMembers[role].remove(account)) {
             emit RoleRevoked(role, account);
         }
     }

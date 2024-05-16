@@ -12,6 +12,7 @@ import {FeeModel} from "./FeeModel.sol";
 contract FireBridge is BridgeStorage, Governable {
     using RequestLib for Request;
     using EnumerableSet for EnumerableSet.AddressSet;
+    using EnumerableSet for EnumerableSet.Bytes32Set;
 
     event QualifiedUserAdded(
         address indexed _user,
@@ -41,6 +42,9 @@ contract FireBridge is BridgeStorage, Governable {
     event RequestConfirmed(bytes32 indexed _hash);
 
     event FeePaid(address indexed _feeRecipient, uint256 indexed _feeAmount);
+
+    event DstChainAdded(bytes32 indexed _dstChain);
+    event DstChainRemoved(bytes32 indexed _dstChain);
 
     modifier onlyMinter() {
         require(msg.sender == minter, "Caller not minter");
@@ -188,6 +192,28 @@ contract FireBridge is BridgeStorage, Governable {
         emit FeeRecipientSet(_feeRecipient);
     }
 
+    function addDstChains(bytes32[] memory _dstChains) external onlyOwner {
+        for (uint i = 0; i < _dstChains.length; i++) {
+            bytes32 _dstChain = _dstChains[i];
+            require(
+                _dstChain != MAIN_CHAIN && _dstChain != chain(),
+                "Invalid dst chain"
+            );
+            if (dstChains.add(_dstChain)) {
+                emit DstChainAdded(_dstChain);
+            }
+        }
+    }
+
+    function removeDstChains(bytes32[] memory _dstChains) external onlyOwner {
+        for (uint i = 0; i < _dstChains.length; i++) {
+            bytes32 _dstChain = _dstChains[i];
+            if (dstChains.remove(_dstChain)) {
+                emit DstChainRemoved(_dstChain);
+            }
+        }
+    }
+
     /// @notice Mark the deposit tx invalid and reject the minting request if any.
     function blockDepositTx(
         bytes32 _depositTxid,
@@ -312,15 +338,13 @@ contract FireBridge is BridgeStorage, Governable {
     ) public whenNotPaused returns (bytes32 _hash, Request memory _r) {
         // Check request.
         require(_amount > 0, "Invalid amount");
+        require(dstChains.contains(_targetChain), "Target chain not allowed");
 
         // Compose request. Self -> Target
-        bytes32 _srcChain = chain();
-        require(_targetChain != _srcChain, "Self-cross not allowed");
-
         _r = Request({
             nonce: nonce(),
             op: Operation.CrosschainRequest,
-            srcChain: _srcChain,
+            srcChain: chain(),
             srcAddress: abi.encode(msg.sender),
             amount: _amount,
             dstChain: _targetChain,
@@ -548,6 +572,11 @@ contract FireBridge is BridgeStorage, Governable {
         address _user
     ) external view returns (UserInfo memory info) {
         info = userInfo[_user];
+    }
+
+    /// @notice Get qualified user information.
+    function getValidDstChains() external view returns (bytes32[] memory) {
+        return dstChains.values();
     }
 
     /// @notice Get request by the index a.k.a the id.

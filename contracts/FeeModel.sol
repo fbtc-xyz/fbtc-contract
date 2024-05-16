@@ -8,15 +8,18 @@ import {Operation, Request} from "./Common.sol";
 contract FeeModel is Ownable {
     uint32 public constant FEE_RATE_BASE = 1_000_000;
 
-    struct FeeConfig {
-        bool active; // To distinguish between **Free** and **Unset**
-        uint32 feeRate;
-        uint256 minFee;
+    struct FeeTier {
+        uint224 amountTier; // Amount tier.
+        uint32 feeRate; // Fee rate.
     }
 
-    mapping(Operation op => FeeConfig cfg) public defaultFeeConfig;
-    mapping(Operation op => mapping(bytes32 dstChain => FeeConfig cfg))
-        public chainFeeConfig;
+    struct FeeConfig {
+        uint256 minFee; // Minimum fee.
+        FeeTier[] tiers; // Order by amount asc.
+    }
+
+    mapping(Operation op => FeeConfig cfg) defaultFeeConfig;
+    mapping(Operation op => mapping(bytes32 dstChain => FeeConfig cfg)) chainFeeConfig;
 
     event DefaultFeeConfigSet(Operation indexed _op, FeeConfig _config);
     event ChainFeeConfigSet(
@@ -38,23 +41,49 @@ contract FeeModel is Ownable {
 
     function _getFee(
         uint256 _amount,
-        FeeConfig memory _config
-    ) internal pure returns (uint256 _fee) {
-        _fee = ((uint256(_config.feeRate) * _amount) / FEE_RATE_BASE);
+        FeeConfig storage _config
+    ) internal view returns (uint256 _fee) {
+        uint256 minFee = _config.minFee;
+        require(minFee < _amount, "amount lower than minimal fee");
 
-        if (_fee < _config.minFee) {
-            // Minimal fee
-            _fee = _config.minFee;
+        uint256 length = _config.tiers.length;
+        assert(length > 0);
+
+        for (uint i = 0; i < length; i++) {
+            FeeTier storage tier = _config.tiers[i];
+            if (i == length - 1 || _amount < uint256(tier.amountTier)) {
+                // Note: Use `<` instead of `<=`, the border is not included.
+                _fee = (uint256(tier.feeRate) * _amount) / FEE_RATE_BASE;
+                break;
+            }
         }
 
-        require(_fee < _amount, "amount lower than minimal fee");
+        if (_fee < minFee) {
+            // Minimal fee
+            _fee = minFee;
+        }
     }
 
     function _validateConfig(FeeConfig calldata _config) internal pure {
-        require(
-            _config.feeRate <= FEE_RATE_BASE / 100,
-            "Fee rate too high, > 1%"
-        );
+        uint224 prevAmount = 0;
+        for (uint i = 0; i < _config.tiers.length; i++) {
+            FeeTier calldata tier = _config.tiers[i];
+
+            uint224 amount = tier.amountTier;
+            require(amount >= prevAmount, "Tiers not in order");
+            prevAmount = amount;
+
+            require(
+                tier.feeRate <= FEE_RATE_BASE / 100,
+                "Fee rate too high, > 1%"
+            );
+            if (i == _config.tiers.length - 1) {
+                require(
+                    amount == type(uint224).max,
+                    "The last tier should be uint224.max"
+                );
+            }
+        }
     }
 
     function setDefaultFeeConfig(
@@ -72,18 +101,33 @@ contract FeeModel is Ownable {
         bytes32 _dstChain,
         FeeConfig calldata _config
     ) external onlyOwner {
-        _validateOp(_op);
+        require(_op == Operation.CrosschainRequest, "Invalid op");
         _validateConfig(_config);
         chainFeeConfig[_op][_dstChain] = _config;
         emit ChainFeeConfigSet(_op, _dstChain, _config);
     }
 
+    // View functions.
+
     function getFee(Request calldata r) external view returns (uint256 _fee) {
         _validateOp(r.op);
-        FeeConfig memory _config = chainFeeConfig[r.op][r.dstChain];
-        if (_config.active) return _getFee(r.amount, _config);
+        FeeConfig storage _config = chainFeeConfig[r.op][r.dstChain];
+        if (_config.tiers.length > 0) return _getFee(r.amount, _config);
         _config = defaultFeeConfig[r.op];
-        if (_config.active) return _getFee(r.amount, _config);
+        if (_config.tiers.length > 0) return _getFee(r.amount, _config);
         return 0;
+    }
+
+    function getDefaultFeeConfig(
+        Operation _op
+    ) external view returns (FeeConfig memory config) {
+        return defaultFeeConfig[_op];
+    }
+
+    function getChainFeeConfig(
+        Operation _op,
+        bytes32 _dstChain
+    ) external view returns (FeeConfig memory config) {
+        return chainFeeConfig[_op][_dstChain];
     }
 }

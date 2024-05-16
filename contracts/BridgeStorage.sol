@@ -9,6 +9,7 @@ contract BridgeStorage {
     address public fbtc;
 
     EnumerableSet.AddressSet internal qualifiedUsers;
+    EnumerableSet.Bytes32Set internal dstChains;
 
     mapping(address qualifiedUser => UserInfo info) public userInfo;
     mapping(string depositAddress => address qualifiedUser)

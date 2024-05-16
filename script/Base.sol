@@ -4,6 +4,28 @@ pragma solidity ^0.8.13;
 import {Script, console2 as console} from "forge-std/Script.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 
+contract SingletonFactory {
+    /**
+     * @notice Deploys `_initCode` using `_salt` for defining the deterministic address.
+     * @param _initCode Initialization code.
+     * @param _salt Arbitrary value to modify resulting address.
+     * @return createdContract Created contract address.
+     */
+    function deploy(
+        bytes memory _initCode,
+        bytes32 _salt
+    ) public returns (address payable createdContract) {
+        assembly {
+            createdContract := create2(
+                0,
+                add(_initCode, 0x20),
+                mload(_initCode),
+                _salt
+            )
+        }
+    }
+}
+
 contract BaseScript is Script {
     using stdJson for string;
 
@@ -28,11 +50,14 @@ contract BaseScript is Script {
 
     address public owner;
     uint256 public deployerPrivateKey;
+    SingletonFactory public factory;
 
     function setUp() public {
         deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         owner = vm.addr(deployerPrivateKey);
         console.log("owner", owner);
+
+        factory = SingletonFactory(vm.envAddress("SINGLETON_FACTORY"));
     }
 
     function getChainPath(
@@ -80,7 +105,7 @@ contract BaseScript is Script {
         string memory chain,
         string memory tag
     ) public view returns (ContractConfig memory c) {
-        string memory name = string.concat(chain, "_", tag);
+        string memory name = string.concat(tag, "_", chain);
         string memory path = getPath(
             string.concat("addresses/", name, ".json")
         );
@@ -97,7 +122,7 @@ contract BaseScript is Script {
         address fee,
         address bridge
     ) public {
-        string memory name = string.concat(chain, "_", tag);
+        string memory name = string.concat(tag, "_", chain);
         string memory path = getPath(
             string.concat("addresses/", name, ".json")
         );
@@ -108,9 +133,5 @@ contract BaseScript is Script {
         json.serialize("3_fee", fee);
         string memory tmp = json.serialize("4_bridge", bridge);
         tmp.write(path);
-    }
-
-    function run() public virtual {
-        console.log("Nothing to do");
     }
 }

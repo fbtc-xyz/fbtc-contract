@@ -11,7 +11,7 @@ optimizer_runs = 20_000
 fs_permissions = [{ access = "read-write", path = "./script/deployments"}]
 
 [rpc_endpoints]
-seth = "https://rpc-sepolia.rockx.com"
+seth = "https://rpc.sepolia.org"
 smnt = "https://rpc.sepolia.mantle.xyz"
 
 [etherscan]

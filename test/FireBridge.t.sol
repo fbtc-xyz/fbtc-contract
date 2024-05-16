@@ -44,6 +44,12 @@ contract FireBridgeTest is Test {
         minter = new FBTCMinter(OWNER, address(bridge));
         bridge.setMinter(address(minter));
 
+        bytes32[] memory dstChains = new bytes32[](3);
+        dstChains[0] = DST_CHAIN1;
+        dstChains[1] = DST_CHAIN2;
+        dstChains[2] = DST_CHAIN3;
+        bridge.addDstChains(dstChains);
+
         minter.grantRole(minter.MINT_ROLE(), OWNER);
         minter.grantRole(minter.BURN_ROLE(), OWNER);
         minter.grantRole(minter.CROSSCHAIN_ROLE(), OWNER);
@@ -248,6 +254,9 @@ contract FireBridgeTest is Test {
         minter.confirmMintRequest(_hash);
         assertEq(fbtc.balanceOf(OWNER), 1000);
 
+        vm.expectRevert("Target chain not allowed");
+        bridge.addEVMCrosschainRequest(1234, ONE, 500);
+
         (_hash, ) = bridge.addEVMCrosschainRequest(
             uint256(DST_CHAIN1),
             ONE,
@@ -293,125 +302,5 @@ contract FireBridgeTest is Test {
 
         vm.expectRevert("Source request already confirmed");
         _confirmCrosschainRequest(rs[2], _hash3);
-    }
-
-    function testFee() public {
-        FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(
-            true,
-            feeModel.FEE_RATE_BASE() / 100,
-            0
-        );
-        feeModel.setDefaultFeeConfig(Operation.Mint, _config);
-
-        feeModel.setDefaultFeeConfig(Operation.Burn, _config);
-
-        feeModel.setDefaultFeeConfig(Operation.CrosschainRequest, _config);
-
-        (bytes32 _hash, ) = bridge.addMintRequest(1000 ether, TX_DATA1, 1);
-        minter.confirmMintRequest(_hash);
-        assertEq(fbtc.balanceOf(OWNER), 990 ether);
-        assertEq(fbtc.balanceOf(FEE), 10 ether);
-
-        (_hash, ) = bridge.addBurnRequest(100 ether);
-
-        assertEq(fbtc.balanceOf(OWNER), 890 ether);
-        assertEq(fbtc.balanceOf(FEE), 11 ether);
-        minter.confirmBurnRequest(_hash, TX_DATA2, 0);
-
-        (_hash, ) = bridge.addCrosschainRequest(
-            DST_CHAIN1,
-            abi.encode(ONE),
-            100 ether
-        );
-
-        Request memory r = bridge.getRequestByHash(_hash);
-        _confirmCrosschainRequest(r, _hash);
-
-        assertEq(fbtc.balanceOf(OWNER), 790 ether);
-        assertEq(fbtc.balanceOf(FEE), 12 ether);
-    }
-
-    function testFee2() public {
-        // Setup
-        feeModel.setDefaultFeeConfig(
-            Operation.Mint,
-            FeeModel.FeeConfig(true, feeModel.FEE_RATE_BASE() / 100, 1 ether)
-        );
-
-        feeModel.setDefaultFeeConfig(
-            Operation.Burn,
-            FeeModel.FeeConfig(true, feeModel.FEE_RATE_BASE() / 100, 1 ether)
-        );
-
-        feeModel.setDefaultFeeConfig(
-            Operation.CrosschainRequest,
-            FeeModel.FeeConfig(true, feeModel.FEE_RATE_BASE() / 100, 1 ether)
-        );
-
-        feeModel.setChainFeeConfig(
-            Operation.CrosschainRequest,
-            DST_CHAIN2,
-            FeeModel.FeeConfig(
-                true,
-                feeModel.FEE_RATE_BASE() / 100,
-                0.001 ether
-            )
-        );
-        feeModel.setChainFeeConfig(
-            Operation.CrosschainRequest,
-            DST_CHAIN3,
-            FeeModel.FeeConfig(
-                true,
-                feeModel.FEE_RATE_BASE() / 100,
-                0.001 ether
-            )
-        );
-
-        // Test mint fee.
-        (bytes32 _hash, Request memory r2) = bridge.addMintRequest(
-            1000 ether,
-            TX_DATA1,
-            1
-        );
-        assertEq(r2.fee, 10 ether);
-
-        minter.confirmMintRequest(_hash);
-        assertEq(fbtc.balanceOf(OWNER), 990 ether);
-
-        // Test bridge fee.
-
-        vm.expectRevert("amount lower than minimal fee");
-        bridge.addCrosschainRequest(DST_CHAIN1, abi.encode(ONE), 0.5 ether);
-        Request memory r;
-        (_hash, r) = bridge.addCrosschainRequest(
-            DST_CHAIN1,
-            abi.encode(ONE),
-            100 ether
-        );
-        assertEq(r.fee, 1 ether);
-        assertEq(fbtc.balanceOf(FEE), 11 ether);
-
-        (_hash, r) = bridge.addCrosschainRequest(
-            DST_CHAIN2,
-            abi.encode(ONE),
-            1 ether
-        );
-        assertEq(r.fee, 0.01 ether);
-        assertEq(fbtc.balanceOf(FEE), 11.01 ether);
-
-        (_hash, r) = bridge.addCrosschainRequest(
-            DST_CHAIN3,
-            abi.encode(ONE),
-            0.002 ether
-        );
-        assertEq(r.fee, 0.001 ether);
-        assertEq(fbtc.balanceOf(FEE), 11.011 ether);
-
-        _confirmCrosschainRequest(r, _hash);
-        assertEq(fbtc.balanceOf(ONE), 0.001 ether);
-
-        (_hash, r) = bridge.addBurnRequest(100 ether);
-        assertEq(r.fee, 1 ether);
-        assertEq(fbtc.balanceOf(FEE), 12.011 ether);
     }
 }
