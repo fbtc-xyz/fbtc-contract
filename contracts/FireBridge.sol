@@ -478,7 +478,6 @@ contract FireBridge is BridgeStorage, Governable {
     {
         // Check request.
         require(r.amount > 0, "Invalid request amount");
-        require(r.extra.length > 0, "Empty cross-chain data");
         require(r.dstChain == chain(), "Dst chain not match");
         require(
             r.op == Operation.CrosschainConfirm,

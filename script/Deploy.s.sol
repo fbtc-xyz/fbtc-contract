@@ -51,12 +51,7 @@ contract DeployScript is BaseScript {
         minter = new FBTCMinter(owner, address(bridge));
         bridge.setMinter(address(minter));
 
-        new FBTCGovernorModule(
-            owner,
-            address(bridge),
-            address(fbtc),
-            address(feeModel)
-        );
+        new FBTCGovernorModule(owner, address(fbtc));
 
         vm.stopBroadcast();
 
@@ -160,12 +155,7 @@ contract DeployScript is BaseScript {
         factory.deploy(
             abi.encodePacked(
                 type(FBTCGovernorModule).creationCode,
-                abi.encode(
-                    owner,
-                    address(bridge),
-                    address(fbtc),
-                    address(feeModel)
-                )
+                abi.encode(owner, address(fbtc))
             ),
             _salt
         );

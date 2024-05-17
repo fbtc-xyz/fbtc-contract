@@ -33,21 +33,18 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
     bytes32 public constant FEE_UPDATER_ROLE = "6_bridge_fee_updater";
 
     FBTC public fbtc;
-    FireBridge public bridge;
-    FeeModel public fee;
-
     event FBTCSet(address indexed _fbtc);
-    event BridgeSet(address indexed _bridge);
 
-    constructor(
-        address _owner,
-        address _bridge,
-        address _fbtc,
-        address _fee
-    ) Ownable(_owner) {
-        bridge = FireBridge(_bridge);
+    constructor(address _owner, address _fbtc) Ownable(_owner) {
         fbtc = FBTC(_fbtc);
-        fee = FeeModel(_fee);
+    }
+
+    function bridge() public view returns (FireBridge _bridge) {
+        _bridge = FireBridge(fbtc.bridge());
+    }
+
+    function feeModel() public view returns (FeeModel _feeModel) {
+        _feeModel = FeeModel(bridge().feeModel());
     }
 
     function _call(address _to, bytes memory _data) internal {
@@ -75,11 +72,6 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
         emit FBTCSet(_fbtc);
     }
 
-    function setBridge(address _bridge) external onlyOwner {
-        bridge = FireBridge(_bridge);
-        emit BridgeSet(_bridge);
-    }
-
     function lockUserFBTCTransfer(
         address _user
     ) external onlyRole(LOCKER_ROLE) {
@@ -91,7 +83,8 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
     }
 
     function pauseBridge() external onlyRole(BRIDGE_PAUSER_ROLE) {
-        _call(address(bridge), abi.encodeCall(bridge.pause, ()));
+        FireBridge _bridge = bridge();
+        _call(address(_bridge), abi.encodeCall(_bridge.pause, ()));
     }
 
     function addQualifiedUser(
@@ -99,10 +92,11 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
         string calldata _depositAddress,
         string calldata _withdrawalAddress
     ) external onlyRole(USER_MANAGER_ROLE) {
+        FireBridge _bridge = bridge();
         _call(
-            address(bridge),
+            address(_bridge),
             abi.encodeCall(
-                bridge.addQualifiedUser,
+                _bridge.addQualifiedUser,
                 (_qualifiedUser, _depositAddress, _withdrawalAddress)
             )
         );
@@ -111,25 +105,35 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
     function lockQualifiedUser(
         address _qualifiedUser
     ) external onlyRole(USER_MANAGER_ROLE) {
+        FireBridge _bridge = bridge();
         _call(
-            address(bridge),
-            abi.encodeCall(bridge.lockQualifiedUser, (_qualifiedUser))
+            address(_bridge),
+            abi.encodeCall(_bridge.lockQualifiedUser, (_qualifiedUser))
         );
     }
 
     function addDstChains(
         bytes32[] memory _dstChains
     ) external onlyRole(CHAIN_MANAGER_ROLE) {
-        bridge.addDstChains(_dstChains);
+        FireBridge _bridge = bridge();
+        _call(
+            address(_bridge),
+            abi.encodeCall(_bridge.addDstChains, (_dstChains))
+        );
     }
 
     function removeDstChains(
         bytes32[] memory _dstChains
     ) external onlyRole(CHAIN_MANAGER_ROLE) {
-        bridge.removeDstChains(_dstChains);
+        FireBridge _bridge = bridge();
+        _call(
+            address(_bridge),
+            abi.encodeCall(_bridge.removeDstChains, (_dstChains))
+        );
     }
 
     function updateETHCrossChainMinFee(
+        bytes32 chain,
         uint256 _minFee
     ) external onlyRole(FEE_UPDATER_ROLE) {
         require(
@@ -137,10 +141,17 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
             "Min fee should be lower than 0.01 FBTC"
         );
         Operation op = Operation.CrosschainRequest;
-        bytes32 chain = ChainCode.ETH;
 
-        FeeModel.FeeConfig memory config = fee.getChainFeeConfig(op, chain);
+        FeeModel _feeModel = feeModel();
+        FeeModel.FeeConfig memory config = _feeModel.getChainFeeConfig(
+            op,
+            chain
+        );
+        require(config.tiers.length > 0, "Config not exists");
         config.minFee = _minFee;
-        fee.setChainFeeConfig(op, chain, config);
+        _call(
+            address(_feeModel),
+            abi.encodeCall(_feeModel.setChainFeeConfig, (op, chain, config))
+        );
     }
 }
