@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import {Request} from "./Common.sol";
 import {FireBridge} from "./FireBridge.sol";
-import {RoleBasedAccessControl, Ownable} from "./RoleBasedAccessControl.sol";
+import {RoleBasedAccessControl} from "./base/RoleBasedAccessControl.sol";
 
 contract FBTCMinter is RoleBasedAccessControl {
     FireBridge public bridge;
@@ -14,7 +14,12 @@ contract FBTCMinter is RoleBasedAccessControl {
 
     event BridgeUpdated(address indexed newBridge, address indexed oldBridge);
 
-    constructor(address _owner, address _bridge) Ownable(_owner) {
+    constructor(address _owner, address _bridge) {
+        initialize(_owner, _bridge);
+    }
+
+    function initialize(address _owner, address _bridge) public initializer {
+        __BaseOwnableUpgradeable_init(_owner);
         bridge = FireBridge(_bridge);
     }
 
@@ -40,12 +45,8 @@ contract FBTCMinter is RoleBasedAccessControl {
 
     function confirmCrosschainRequest(
         Request calldata r
-    )
-        external
-        onlyRole(CROSSCHAIN_ROLE)
-        returns (bytes32 _hash, Request memory _r)
-    {
-        (_hash, _r) = bridge.confirmCrosschainRequest(r);
+    ) external onlyRole(CROSSCHAIN_ROLE) {
+        bridge.confirmCrosschainRequest(r);
     }
 
     function batchConfirmCrosschainRequest(

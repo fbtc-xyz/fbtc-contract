@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {BaseOwnableUpgradeable} from "./BaseOwnableUpgradeable.sol";
 
 /// @dev A simple RoleBasedAccessControl module modified from
 ///    https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/AccessControl.sol
 ///    https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/extensions/AccessControlEnumerable.sol
-abstract contract RoleBasedAccessControl is Ownable {
+abstract contract RoleBasedAccessControl is BaseOwnableUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     mapping(bytes32 role => EnumerableSet.AddressSet) private _roleMembers;

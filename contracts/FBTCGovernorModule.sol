@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import {Operation, ChainCode} from "./Common.sol";
 import {FBTC} from "./FBTC.sol";
 import {FireBridge} from "./FireBridge.sol";
 import {FeeModel} from "./FeeModel.sol";
-import {RoleBasedAccessControl, Ownable} from "./RoleBasedAccessControl.sol";
+import {RoleBasedAccessControl} from "./base/RoleBasedAccessControl.sol";
 
 contract Enum {
     enum Operation {
@@ -35,7 +35,12 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
     FBTC public fbtc;
     event FBTCSet(address indexed _fbtc);
 
-    constructor(address _owner, address _fbtc) Ownable(_owner) {
+    constructor(address _owner, address _fbtc) {
+        initialize(_owner, _fbtc);
+    }
+
+    function initialize(address _owner, address _fbtc) public initializer {
+        __BaseOwnableUpgradeable_init(_owner);
         fbtc = FBTC(_fbtc);
     }
 
@@ -140,18 +145,15 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
             _minFee <= 0.01 * 1e8,
             "Min fee should be lower than 0.01 FBTC"
         );
-        Operation op = Operation.CrosschainRequest;
-
         FeeModel _feeModel = feeModel();
-        FeeModel.FeeConfig memory config = _feeModel.getChainFeeConfig(
-            op,
+        FeeModel.FeeConfig memory config = _feeModel.getCrosschainFeeConfig(
             chain
         );
         require(config.tiers.length > 0, "Config not exists");
         config.minFee = _minFee;
         _call(
             address(_feeModel),
-            abi.encodeCall(_feeModel.setChainFeeConfig, (op, chain, config))
+            abi.encodeCall(_feeModel.setCrosschainFeeConfig, (chain, config))
         );
     }
 }

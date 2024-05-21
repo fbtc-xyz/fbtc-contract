@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import {Test, console2 as console} from "forge-std/Test.sol";
 import {FBTC} from "../contracts/FBTC.sol";
@@ -35,6 +35,15 @@ contract FireModelTest is Test {
         bridge.addQualifiedUser(OWNER, BTC_ADDR1, BTC_ADDR2);
 
         feeModel = new FeeModel(OWNER);
+
+        FeeModel.FeeConfig memory _config;
+        _config.tiers = new FeeModel.FeeTier[](1);
+        _config.tiers[0].amountTier = type(uint224).max;
+
+        feeModel.setDefaultFeeConfig(Operation.Mint, _config);
+        feeModel.setDefaultFeeConfig(Operation.Burn, _config);
+        feeModel.setDefaultFeeConfig(Operation.CrosschainRequest, _config);
+
         bridge.setFeeModel(address(feeModel));
         bridge.setFeeRecipient(FEE);
 
@@ -144,19 +153,11 @@ contract FireModelTest is Test {
 
         // chain1 0.1%
         tier.feeRate = feeModel.FEE_RATE_BASE() / 1000;
-        feeModel.setChainFeeConfig(
-            Operation.CrosschainRequest,
-            DST_CHAIN1,
-            _config
-        );
+        feeModel.setCrosschainFeeConfig(DST_CHAIN1, _config);
 
         // chain2 1%
         tier.feeRate = feeModel.FEE_RATE_BASE() / 100;
-        feeModel.setChainFeeConfig(
-            Operation.CrosschainRequest,
-            DST_CHAIN2,
-            _config
-        );
+        feeModel.setCrosschainFeeConfig(DST_CHAIN2, _config);
 
         bytes32 _hash;
         Request memory r;

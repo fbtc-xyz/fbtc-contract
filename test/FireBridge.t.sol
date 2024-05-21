@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import {Test, console2 as console} from "forge-std/Test.sol";
 import {FBTC} from "../contracts/FBTC.sol";
@@ -35,6 +35,13 @@ contract FireBridgeTest is Test {
         bridge.addQualifiedUser(OWNER, BTC_ADDR1, BTC_ADDR2);
 
         feeModel = new FeeModel(OWNER);
+        FeeModel.FeeConfig memory _config;
+        _config.tiers = new FeeModel.FeeTier[](1);
+        _config.tiers[0].amountTier = type(uint224).max;
+        feeModel.setDefaultFeeConfig(Operation.Mint, _config);
+        feeModel.setDefaultFeeConfig(Operation.Burn, _config);
+        feeModel.setDefaultFeeConfig(Operation.CrosschainRequest, _config);
+
         bridge.setFeeModel(address(feeModel));
         bridge.setFeeRecipient(FEE);
 
@@ -164,14 +171,24 @@ contract FireBridgeTest is Test {
         assertTrue(r.status == Status.Unused);
 
         // Cross-chain confirmation
-        Request memory r2;
-        (_hash, r2) = _confirmCrosschainRequest(r, _hash);
-        assertEq(r2.nonce, bridge.nonce() - 1);
-        assertEq(abi.encode(bridge.getRequestByHash(_hash)), abi.encode(r2));
+        _confirmCrosschainRequest(r, _hash);
 
+        Request memory r2 = bridge.getRequestById(bridge.nonce() - 1);
         r2.op = r.op;
         r2.nonce = r.nonce;
         assertEq(abi.encode(r), abi.encode(r2));
+
+        Request[] memory rs = bridge.getRequestsByIdRange(0, 100);
+        assertEq(rs.length, 4);
+        assertEq(rs[0].nonce, 0);
+        assertEq(rs[1].nonce, 1);
+        assertEq(rs[2].nonce, 2);
+        assertEq(rs[3].nonce, 3);
+
+        rs = bridge.getRequestsByIdRange(1, 2);
+        assertEq(rs.length, 2);
+        assertEq(rs[0].nonce, 1);
+        assertEq(rs[1].nonce, 2);
     }
 
     function testMint() public {
@@ -237,14 +254,14 @@ contract FireBridgeTest is Test {
     function _confirmCrosschainRequest(
         Request memory _r,
         bytes32 _srcRequestHash
-    ) internal returns (bytes32 _hash, Request memory _dstR) {
+    ) internal {
         // Should be correct set in source request.
         assertEq(_r.extra, abi.encode(_srcRequestHash));
         _r.op = Operation.CrosschainConfirm;
 
         uint256 backup = block.chainid;
         vm.chainId(uint256(_r.dstChain)); // Temperary mock bridge to dst chain.
-        (_hash, _dstR) = minter.confirmCrosschainRequest(_r);
+        minter.confirmCrosschainRequest(_r);
         vm.chainId(backup);
     }
 
@@ -288,7 +305,15 @@ contract FireBridgeTest is Test {
         rs[0] = bridge.getRequestByHash(_hash1);
         rs[1] = bridge.getRequestByHash(_hash2);
         rs[2] = bridge.getRequestByHash(_hash3);
+
+        bytes32[] memory hashes = new bytes32[](3);
+        hashes[0] = _hash1;
+        hashes[1] = _hash2;
+        hashes[2] = _hash3;
+        Request[] memory rs2 = bridge.getRequestsByHashes(hashes);
+
         for (uint i = 0; i <= 2; i++) {
+            assertEq(abi.encode(rs[i]), abi.encode(rs2[i]));
             rs[i].op = Operation.CrosschainConfirm;
         }
 

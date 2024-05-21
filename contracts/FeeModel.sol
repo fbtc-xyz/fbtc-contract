@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
-
-import "@openzeppelin/contracts/access/Ownable.sol";
+pragma solidity 0.8.20;
 
 import {Operation, Request} from "./Common.sol";
+import {BaseOwnableUpgradeable} from "./base/BaseOwnableUpgradeable.sol";
 
-contract FeeModel is Ownable {
+contract FeeModel is BaseOwnableUpgradeable {
     uint32 public constant FEE_RATE_BASE = 1_000_000;
 
     struct FeeTier {
@@ -19,16 +18,18 @@ contract FeeModel is Ownable {
     }
 
     mapping(Operation op => FeeConfig cfg) defaultFeeConfig;
-    mapping(Operation op => mapping(bytes32 dstChain => FeeConfig cfg)) chainFeeConfig;
+    mapping(bytes32 dstChain => FeeConfig cfg) crosschainFeeConfig;
 
     event DefaultFeeConfigSet(Operation indexed _op, FeeConfig _config);
-    event ChainFeeConfigSet(
-        Operation indexed _op,
-        bytes32 indexed _chain,
-        FeeConfig _config
-    );
+    event CrosschainFeeConfigSet(bytes32 indexed _chain, FeeConfig _config);
 
-    constructor(address _owner) Ownable(_owner) {}
+    constructor(address _owner) {
+        initialize(_owner);
+    }
+
+    function initialize(address _owner) public initializer {
+        __BaseOwnableUpgradeable_init(_owner);
+    }
 
     function _validateOp(Operation op) internal pure {
         require(
@@ -47,7 +48,7 @@ contract FeeModel is Ownable {
         require(minFee < _amount, "amount lower than minimal fee");
 
         uint256 length = _config.tiers.length;
-        assert(length > 0);
+        require(length > 0, "Empty fee config");
 
         for (uint i = 0; i < length; i++) {
             FeeTier storage tier = _config.tiers[i];
@@ -66,6 +67,12 @@ contract FeeModel is Ownable {
 
     function _validateConfig(FeeConfig calldata _config) internal pure {
         uint224 prevAmount = 0;
+        require(
+            _config.minFee <= 0.03 * 1e8,
+            "Minimal fee should not exceed 0.03 FBTC"
+        );
+        require(_config.tiers.length > 0, "Empty fee config");
+
         for (uint i = 0; i < _config.tiers.length; i++) {
             FeeTier calldata tier = _config.tiers[i];
 
@@ -96,38 +103,40 @@ contract FeeModel is Ownable {
         emit DefaultFeeConfigSet(_op, _config);
     }
 
-    function setChainFeeConfig(
-        Operation _op,
+    function setCrosschainFeeConfig(
         bytes32 _dstChain,
         FeeConfig calldata _config
     ) external onlyOwner {
-        require(_op == Operation.CrosschainRequest, "Invalid op");
         _validateConfig(_config);
-        chainFeeConfig[_op][_dstChain] = _config;
-        emit ChainFeeConfigSet(_op, _dstChain, _config);
+        crosschainFeeConfig[_dstChain] = _config;
+        emit CrosschainFeeConfigSet(_dstChain, _config);
     }
 
     // View functions.
 
     function getFee(Request calldata r) external view returns (uint256 _fee) {
         _validateOp(r.op);
-        FeeConfig storage _config = chainFeeConfig[r.op][r.dstChain];
-        if (_config.tiers.length > 0) return _getFee(r.amount, _config);
+        FeeConfig storage _config;
+        if (r.op == Operation.CrosschainRequest) {
+            _config = crosschainFeeConfig[r.dstChain];
+            if (_config.tiers.length > 0) return _getFee(r.amount, _config);
+        }
         _config = defaultFeeConfig[r.op];
         if (_config.tiers.length > 0) return _getFee(r.amount, _config);
-        return 0;
+        revert("Fee config not set");
     }
 
     function getDefaultFeeConfig(
         Operation _op
-    ) external view returns (FeeConfig memory config) {
-        return defaultFeeConfig[_op];
+    ) external view returns (FeeConfig memory _config) {
+        _config = defaultFeeConfig[_op];
+        require(_config.tiers.length > 0, "Fee config not set");
     }
 
-    function getChainFeeConfig(
-        Operation _op,
+    function getCrosschainFeeConfig(
         bytes32 _dstChain
-    ) external view returns (FeeConfig memory config) {
-        return chainFeeConfig[_op][_dstChain];
+    ) external view returns (FeeConfig memory _config) {
+        _config = crosschainFeeConfig[_dstChain];
+        require(_config.tiers.length > 0, "Fee config not set");
     }
 }

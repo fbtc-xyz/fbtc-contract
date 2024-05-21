@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {Request, UserInfo} from "./Common.sol";
+import {Request, UserInfo} from "../Common.sol";
 
 contract BridgeStorage {
     address public minter;

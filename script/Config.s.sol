@@ -66,6 +66,11 @@ contract ConfigScript is BaseScript {
 
         fee.setDefaultFeeConfig(Operation.CrosschainRequest, _config);
 
+        // No mint fee
+        _config.minFee = 0;
+        tiers[0].feeRate = 0;
+        fee.setDefaultFeeConfig(Operation.Mint, _config);
+
         // Burn fee:
         _config.minFee = 0.01 * 1e8; // 0.01 BTC
         _config.tiers = new FeeModel.FeeTier[](4);

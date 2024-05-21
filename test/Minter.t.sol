@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import {Test, console2} from "forge-std/Test.sol";
+
+import {Operation} from "../contracts/Common.sol";
 import {FBTC} from "../contracts/FBTC.sol";
 import {FBTCMinter} from "../contracts/FBTCMinter.sol";
 import {FeeModel} from "../contracts/FeeModel.sol";
@@ -20,6 +22,13 @@ contract MinterTest is Test {
         bridge = new FireBridge(OWNER, ChainCode.BTC);
 
         feeModel = new FeeModel(OWNER);
+        FeeModel.FeeConfig memory _config;
+        _config.tiers = new FeeModel.FeeTier[](1);
+        _config.tiers[0].amountTier = type(uint224).max;
+        feeModel.setDefaultFeeConfig(Operation.Mint, _config);
+        feeModel.setDefaultFeeConfig(Operation.Burn, _config);
+        feeModel.setDefaultFeeConfig(Operation.CrosschainRequest, _config);
+
         bridge.setFeeModel(address(feeModel));
 
         fbtc = new FBTC(OWNER, address(bridge));

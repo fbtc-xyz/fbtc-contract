@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
-import {FToken} from "./FToken.sol";
+import {FToken} from "./base/FToken.sol";
 
 contract FBTC is FToken {
     constructor(address _owner, address _bridge) {

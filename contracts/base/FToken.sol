@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import {Governable} from "./Governable.sol";
+import {BasePausableUpgradeable} from "./BasePausableUpgradeable.sol";
 
-abstract contract FToken is ERC20Upgradeable, Governable {
+abstract contract FToken is ERC20Upgradeable, BasePausableUpgradeable {
     address public bridge;
 
     mapping(address user => bool blocked) public userBlocked;
@@ -26,7 +26,7 @@ abstract contract FToken is ERC20Upgradeable, Governable {
         string memory _symbol
     ) internal onlyInitializing {
         __ERC20_init(_name, _symbol);
-        __Governable_init(_owner);
+        __BasePausableUpgradeable_init(_owner);
         bridge = _bridge;
     }
 

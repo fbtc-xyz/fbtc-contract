@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {Request, UserInfo, RequestLib, Operation, Status, ChainCode} from "./Common.sol";
-import {BridgeStorage} from "./BridgeStorage.sol";
-import {FToken} from "./FToken.sol";
-import {Governable} from "./Governable.sol";
+import {BridgeStorage} from "./base/BridgeStorage.sol";
+import {FToken} from "./base/FToken.sol";
+import {BasePausableUpgradeable} from "./base/BasePausableUpgradeable.sol";
 import {FeeModel} from "./FeeModel.sol";
 
-contract FireBridge is BridgeStorage, Governable {
+contract FireBridge is BridgeStorage, BasePausableUpgradeable {
     using RequestLib for Request;
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -65,14 +65,10 @@ contract FireBridge is BridgeStorage, Governable {
     }
 
     function initialize(address _owner) public initializer {
-        __Governable_init(_owner);
-        Request memory dummy;
-        _addRequest(dummy);
-        assert(nonce() == 1); // Force the request id starts from 1.
+        __BasePausableUpgradeable_init(_owner);
     }
 
     function _splitFeeAndUpdate(Request memory r) internal view {
-        assert(r.fee == 0);
         uint256 _fee = FeeModel(feeModel).getFee(r);
         r.fee = _fee;
         r.amount = r.amount - _fee;
@@ -91,7 +87,10 @@ contract FireBridge is BridgeStorage, Governable {
     }
 
     function _addRequest(Request memory r) internal returns (bytes32 _hash) {
-        assert(r.nonce == requestHashes.length);
+        require(
+            r.nonce == requestHashes.length,
+            "Fatal: nonce not equals array length"
+        ); // Should never happen.
         _hash = r.getRequestHash();
 
         // For CrosschainRequest: update extra with self hash.
@@ -465,17 +464,11 @@ contract FireBridge is BridgeStorage, Governable {
     ///       1. The `op` should be `CrosschainConfirm`
     ///       2. The `nonce` is the source nonce, used to calc source request hash.
     ///       3. The `status` should be `Unused` (0).
-    ///       4. The `extra` should contain the source request hash.
+    ///       4. The `extra` should be 32 bytes length and contain the source request hash.
     /// @param r The full cross-chain request.
-    /// @return _dsthash The hash of the confirmation request.
     function confirmCrosschainRequest(
         Request memory r
-    )
-        external
-        onlyMinter
-        whenNotPaused
-        returns (bytes32 _dsthash, Request memory _dstRequest)
-    {
+    ) external onlyMinter whenNotPaused {
         // Check request.
         require(r.amount > 0, "Invalid request amount");
         require(r.dstChain == chain(), "Dst chain not match");
@@ -509,10 +502,8 @@ contract FireBridge is BridgeStorage, Governable {
 
         // Save request.
         r.nonce = nonce(); // Override src nonce to dst nonce.
-        _dsthash = _addRequest(r);
+        bytes32 _dsthash = _addRequest(r);
         crosschainRequestConfirmation[srcHash] = _dsthash;
-
-        _dstRequest = r;
 
         // Mint tokens.
         FToken(fbtc).mint(abi.decode(r.dstAddress, (address)), r.amount);
@@ -527,6 +518,10 @@ contract FireBridge is BridgeStorage, Governable {
 
     /// @notice The next request id
     function nonce() public view returns (uint128) {
+        require(
+            requestHashes.length < type(uint128).max,
+            "Fatal: nonce overflow"
+        ); // Unlikely happens.
         return uint128(requestHashes.length);
     }
 
@@ -590,16 +585,16 @@ contract FireBridge is BridgeStorage, Governable {
 
     /// @notice Get multiple requests by an id range.
     /// @param _start The start index.
-    /// @param _end The end index (exclusive).
+    /// @param _end The end index.
     /// @return rs The returned requests.
     function getRequestsByIdRange(
         uint256 _start,
         uint256 _end
     ) external view returns (Request[] memory rs) {
-        uint256 end = requestHashes.length;
-        if (_end > end) _end = end;
-        require(_start < _end, "start > end");
-        uint256 len = _end - _start;
+        uint256 maxIndex = requestHashes.length - 1;
+        if (_end > maxIndex) _end = maxIndex;
+        require(_start <= _end, "start should <= end");
+        uint256 len = _end - _start + 1;
         rs = new Request[](len);
         for (uint i = 0; i < len; i++) {
             rs[i] = requests[requestHashes[i + _start]];
@@ -613,7 +608,7 @@ contract FireBridge is BridgeStorage, Governable {
         bytes32 _hash
     ) public view returns (Request memory r) {
         r = requests[_hash];
-        require(r.nonce > 0, "Request not exists");
+        require(r.op != Operation.Nop, "Request not exists");
     }
 
     /// @notice Get multiple requests by hashes.
@@ -622,6 +617,7 @@ contract FireBridge is BridgeStorage, Governable {
     function getRequestsByHashes(
         bytes32[] calldata _hashes
     ) external view returns (Request[] memory rs) {
+        rs = new Request[](_hashes.length);
         for (uint i = 0; i < _hashes.length; i++) {
             rs[i] = getRequestByHash(_hashes[i]);
         }
