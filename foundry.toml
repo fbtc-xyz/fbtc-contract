@@ -11,11 +11,15 @@ optimizer_runs = 20_000
 fs_permissions = [{ access = "read-write", path = "./script/deployments"}]
 
 [rpc_endpoints]
-seth = "https://rpc.sepolia.org"
+seth = "https://rpc-sepolia.rockx.com"
 smnt = "https://rpc.sepolia.mantle.xyz"
+eth = "https://rpc.ankr.com/eth"
+mnt = "https://rpc.mantle.xyz"
 
 [etherscan]
 seth = { key = "${ETHERSCAN_API_KEY}", url="https://api-sepolia.etherscan.io/api?", chain="sepolia" }
 smnt = { key = "${MANTLE_SEPOLIA_API_KEY}", url="https://explorer.sepolia.mantle.xyz/api?", chain=5003 }
+eth = { key = "${ETHERSCAN_API_KEY}", url="https://api.etherscan.io/api?"}
+mnt = { key = "${MANTLE_SEPOLIA_API_KEY}", url="https://explorer.mantle.xyz/api?"}
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/crates/config

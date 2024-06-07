@@ -37,6 +37,7 @@ contract FireModelTest is Test {
         feeModel = new FeeModel(OWNER);
 
         FeeModel.FeeConfig memory _config;
+        _config.maxFee = type(uint256).max;
         _config.tiers = new FeeModel.FeeTier[](1);
         _config.tiers[0].amountTier = type(uint224).max;
 
@@ -71,7 +72,11 @@ contract FireModelTest is Test {
         );
         FeeModel.FeeTier[] memory tiers = new FeeModel.FeeTier[](1);
         tiers[0] = tier;
-        FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(0, tiers);
+        FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(
+            type(uint256).max,
+            0,
+            tiers
+        );
 
         // mint 0.01%
         feeModel.setDefaultFeeConfig(Operation.Mint, _config);
@@ -107,7 +112,11 @@ contract FireModelTest is Test {
             type(uint224).max,
             feeModel.FEE_RATE_BASE() / 100
         );
-        FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(1000, tiers);
+        FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(
+            2000,
+            1000,
+            tiers
+        );
         // Setup
 
         feeModel.setDefaultFeeConfig(Operation.Burn, _config);
@@ -116,11 +125,11 @@ contract FireModelTest is Test {
         Request memory r;
 
         // Mint
-        (_hash, r) = bridge.addMintRequest(100000, TX_DATA1, 1);
+        (_hash, r) = bridge.addMintRequest(100000000, TX_DATA1, 1);
         assertEq(r.fee, 0);
 
         minter.confirmMintRequest(_hash);
-        assertEq(fbtc.balanceOf(OWNER), 100000);
+        assertEq(fbtc.balanceOf(OWNER), 100000000);
 
         // Test min fee.
 
@@ -130,13 +139,16 @@ contract FireModelTest is Test {
         vm.expectRevert("amount lower than minimal fee");
         bridge.addBurnRequest(1000);
 
+        // Cap to minimum.
         (_hash, r) = bridge.addBurnRequest(1001);
         assertEq(r.fee, 1000);
-        assertEq(fbtc.balanceOf(FEE), 1000);
 
         (_hash, r) = bridge.addBurnRequest(2000);
         assertEq(r.fee, 1000);
-        assertEq(fbtc.balanceOf(FEE), 2000);
+
+        // Cap to maximum
+        (_hash, r) = bridge.addBurnRequest(3000 * 100);
+        assertEq(r.fee, 2000);
     }
 
     function testChainFee() public {
@@ -146,7 +158,11 @@ contract FireModelTest is Test {
         );
         FeeModel.FeeTier[] memory tiers = new FeeModel.FeeTier[](1);
         tiers[0] = tier;
-        FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(0, tiers);
+        FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(
+            type(uint256).max,
+            0,
+            tiers
+        );
 
         // default 0.01% (chain3)
         feeModel.setDefaultFeeConfig(Operation.CrosschainRequest, _config);
@@ -197,6 +213,43 @@ contract FireModelTest is Test {
         assertEq(fbtc.balanceOf(OWNER), 0 ether);
     }
 
+    function testUserBurnFee() public {
+        FeeModel.FeeTier memory tier = FeeModel.FeeTier(
+            type(uint224).max,
+            feeModel.FEE_RATE_BASE() / 100
+        );
+        FeeModel.FeeTier[] memory tiers = new FeeModel.FeeTier[](1);
+        tiers[0] = tier;
+        FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(
+            type(uint256).max,
+            0,
+            tiers
+        );
+
+        // default burn fee 1%
+        tier.feeRate = feeModel.FEE_RATE_BASE() / 100;
+        feeModel.setDefaultFeeConfig(Operation.Burn, _config);
+
+        // ONE burn fee 0.1%
+        tier.feeRate = feeModel.FEE_RATE_BASE() / 1000;
+        feeModel.setUserBurnFeeConfig(ONE, _config);
+
+        // mint
+        (bytes32 _hash, ) = bridge.addMintRequest(2 ether, TX_DATA1, 1);
+        minter.confirmMintRequest(_hash);
+        fbtc.transfer(ONE, 1 ether);
+
+        // Test user burn fee.
+        Request memory r;
+        (, r) = bridge.addBurnRequest(10000);
+        assertEq(r.fee, 100);
+
+        bridge.addQualifiedUser(ONE, BTC_ADDR2, BTC_ADDR1);
+        vm.prank(ONE);
+        (, r) = bridge.addBurnRequest(10000);
+        assertEq(r.fee, 10);
+    }
+
     function testFeeTier() public {
         // Setup
         FeeModel.FeeTier[] memory tiers = new FeeModel.FeeTier[](4);
@@ -223,6 +276,7 @@ contract FireModelTest is Test {
         );
 
         FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(
+            type(uint256).max,
             0.03 * 1e8, // 0.03 FBTC
             tiers
         );

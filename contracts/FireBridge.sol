@@ -421,7 +421,6 @@ contract FireBridge is BridgeStorage, BasePausableUpgradeable {
     }
 
     /// @notice Confirm the burning request.
-    /// @dev `_withdrawalTxData` packing format is defined by off-chain service.
     /// @param _hash The burning request id.
     /// @param _withdrawalTxid The BTC withdrawal txid
     /// @param _outputIndex The transaction output index to user's withdrawal address.
@@ -461,8 +460,8 @@ contract FireBridge is BridgeStorage, BasePausableUpgradeable {
     /// @notice Confirm the cross-chain request.
     /// @dev Most fields of the request should be the same as the one on
     ///      source chain. Note:
-    ///       1. The `op` should be `CrosschainConfirm`
-    ///       2. The `nonce` is the source nonce, used to calc source request hash.
+    ///       1. The `op` is changed to `CrosschainConfirm`
+    ///       2. The `nonce` is the source nonce, used to calculate source request hash.
     ///       3. The `status` should be `Unused` (0).
     ///       4. The `extra` should be 32 bytes length and contain the source request hash.
     /// @param r The full cross-chain request.

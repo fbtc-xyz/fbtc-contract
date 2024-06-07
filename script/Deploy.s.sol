@@ -11,6 +11,7 @@ import {FireBridge, ChainCode} from "../contracts/FireBridge.sol";
 import {FBTCMinter} from "../contracts/FBTCMinter.sol";
 import {FeeModel} from "../contracts/FeeModel.sol";
 import {FBTCGovernorModule} from "../contracts/FBTCGovernorModule.sol";
+import {OneStepDeploy, DeployConfig} from "./OneStepDeploy.sol";
 
 contract DeployScript is BaseScript {
     FBTCMinter public minter;
@@ -75,34 +76,29 @@ contract DeployScript is BaseScript {
 
         bytes32 _mainChain = useXTN ? ChainCode.XTN : ChainCode.BTC;
 
-        bytes32 _salt = bytes32(bytes(tag));
+        // Set salt
+        salt = bytes32(bytes(tag));
 
-        address impl = factory.deploy(
+        address impl = _deploy(
             abi.encodePacked(
                 type(FireBridge).creationCode,
                 abi.encode(owner, _mainChain)
-            ),
-            _salt
+            )
         );
 
         // Wrap into proxy.
         bridge = FireBridge(
-            factory.deploy(
+            _deploy(
                 abi.encodePacked(
                     type(ERC1967Proxy).creationCode,
                     abi.encode(impl, abi.encodeCall(bridge.initialize, (owner)))
-                ),
-                _salt
+                )
             )
         );
 
         feeModel = FeeModel(
-            factory.deploy(
-                abi.encodePacked(
-                    type(FeeModel).creationCode,
-                    abi.encode(owner)
-                ),
-                _salt
+            _deploy(
+                abi.encodePacked(type(FeeModel).creationCode, abi.encode(owner))
             )
         );
 
@@ -110,24 +106,22 @@ contract DeployScript is BaseScript {
         bridge.setFeeRecipient(owner);
 
         fbtc = FBTC(
-            factory.deploy(
+            _deploy(
                 abi.encodePacked(
                     type(FBTC).creationCode,
                     abi.encode(owner, address(bridge))
-                ),
-                _salt
+                )
             )
         );
 
         bridge.setToken(address(fbtc));
 
         minter = FBTCMinter(
-            factory.deploy(
+            _deploy(
                 abi.encodePacked(
                     type(FBTCMinter).creationCode,
                     abi.encode(owner, address(bridge))
-                ),
-                _salt
+                )
             )
         );
 
@@ -152,12 +146,11 @@ contract DeployScript is BaseScript {
         }
         bridge.addDstChains(dstChains);
 
-        factory.deploy(
+        _deploy(
             abi.encodePacked(
                 type(FBTCGovernorModule).creationCode,
                 abi.encode(owner, address(fbtc))
-            ),
-            _salt
+            )
         );
 
         vm.stopBroadcast();
@@ -169,6 +162,187 @@ contract DeployScript is BaseScript {
             address(fbtc),
             address(feeModel),
             address(bridge)
+        );
+    }
+
+    function deployProd(
+        string memory chain,
+        string memory tag,
+        address tokenAddress,
+        bytes32 tokenSalt,
+        address bridgeAddress,
+        bytes32 bridgeSalt
+    ) public {
+        vm.createSelectFork(chain);
+        vm.startBroadcast(deployerPrivateKey);
+
+        // Set salt
+        salt = bytes32(bytes(tag));
+
+        address impl = _deploy(
+            abi.encodePacked(
+                type(FireBridge).creationCode,
+                abi.encode(owner, ChainCode.BTC)
+            )
+        );
+
+        // Wrap into proxy.
+        bridge = FireBridge(
+            factory.deploy(
+                3,
+                bridgeSalt,
+                abi.encodePacked(
+                    type(ERC1967Proxy).creationCode,
+                    abi.encode(impl, abi.encodeCall(bridge.initialize, (owner)))
+                )
+            )
+        );
+        require(address(bridge) == bridgeAddress, "Bridge not match");
+
+        feeModel = FeeModel(
+            _deploy(
+                abi.encodePacked(type(FeeModel).creationCode, abi.encode(owner))
+            )
+        );
+
+        bridge.setFeeModel(address(feeModel));
+        bridge.setFeeRecipient(owner);
+
+        fbtc = FBTC(
+            factory.deploy(
+                3,
+                tokenSalt,
+                abi.encodePacked(
+                    type(FBTC).creationCode,
+                    abi.encode(owner, address(bridge))
+                )
+            )
+        );
+        require(address(fbtc) == tokenAddress, "Token not match");
+
+        bridge.setToken(address(fbtc));
+
+        minter = FBTCMinter(
+            _deploy(
+                abi.encodePacked(
+                    type(FBTCMinter).creationCode,
+                    abi.encode(owner, address(bridge))
+                )
+            )
+        );
+
+        bridge.setMinter(address(minter));
+
+        bytes32[] memory allChains = new bytes32[](2);
+        allChains[
+            0
+        ] = 0x0000000000000000000000000000000000000000000000000000000000000001; // ETH
+        allChains[
+            1
+        ] = 0x0000000000000000000000000000000000000000000000000000000000001388; // MNT
+        bytes32 selfChain = bridge.chain();
+        bytes32[] memory dstChains = new bytes32[](allChains.length - 1);
+
+        uint j = 0;
+        for (uint i = 0; i < allChains.length; ++i) {
+            bytes32 dstChain = allChains[i];
+            if (dstChain != selfChain) {
+                dstChains[j++] = dstChain;
+            }
+        }
+        bridge.addDstChains(dstChains);
+
+        _deploy(
+            abi.encodePacked(
+                type(FBTCGovernorModule).creationCode,
+                abi.encode(owner, address(fbtc))
+            )
+        );
+
+        vm.stopBroadcast();
+
+        saveContractConfig(
+            chain,
+            tag,
+            address(minter),
+            address(fbtc),
+            address(feeModel),
+            address(bridge)
+        );
+    }
+
+    function deployOneStep(
+        string memory chain,
+        string memory conf,
+        string memory version
+    ) public {
+        vm.createSelectFork(chain);
+        vm.startBroadcast(deployerPrivateKey);
+
+        string memory json = vm.readFile(getPath(string.concat(conf, ".json")));
+
+        bytes32[] memory allChains = json.readBytes32Array(".dstChains");
+        bytes32 selfChain = bytes32(block.chainid);
+        uint length = 0;
+        for (uint i = 0; i < allChains.length; ++i) {
+            bytes32 dstChain = allChains[i];
+            if (dstChain != selfChain) {
+                ++length;
+            }
+        }
+        bytes32[] memory dstChains = new bytes32[](length);
+        uint j = 0;
+        for (uint i = 0; i < allChains.length; ++i) {
+            bytes32 dstChain = allChains[i];
+            if (dstChain != selfChain) {
+                dstChains[j++] = dstChain;
+            }
+        }
+
+        bytes32 saltSeed = bytes32(bytes(version));
+        DeployConfig memory c = DeployConfig({
+            factory: json.readAddress(".factory"),
+            tag: saltSeed,
+            mainChain: json.readBytes32(".mainChain"),
+            owner: json.readAddress(".owner"),
+            feeRecipientAndUpdater: json.readAddress(".feeRecipientAndUpdater"),
+            mintOperator: json.readAddress(".mintOperator"),
+            burnOperator: json.readAddress(".burnOperator"),
+            crosschainOperator: json.readAddress(".crosschainOperator"),
+            pauserAndLockers: json.readAddressArray(".pauserAndLockers"),
+            userManager: json.readAddress(".userManager"),
+            chainMananger: json.readAddress(".chainMananger"),
+            fireBridgeCode: type(FireBridge).creationCode,
+            proxyCode: type(ERC1967Proxy).creationCode,
+            fbtcCode: type(FBTC).creationCode,
+            feeModelCode: type(FeeModel).creationCode,
+            minterCode: type(FBTCMinter).creationCode,
+            governorModuleCode: type(FBTCGovernorModule).creationCode,
+            dstChains: dstChains
+        });
+
+        address deployer = factory.deploy(
+            3,
+            bytes32(uint256(saltSeed) - 1),
+            type(OneStepDeploy).creationCode
+        );
+
+        OneStepDeploy(deployer).deploy(c);
+
+        address bridgeAddress = factory.getAddress(
+            3,
+            bytes32(uint256(saltSeed) + 1),
+            deployer,
+            ""
+        );
+
+        saveContractConfig(
+            chain,
+            string.concat(version, "_", conf),
+            FireBridge(bridgeAddress).minter(),
+            FireBridge(bridgeAddress).fbtc(),
+            FireBridge(bridgeAddress).feeModel(),
+            bridgeAddress
         );
     }
 

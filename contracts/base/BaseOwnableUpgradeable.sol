@@ -21,7 +21,7 @@ abstract contract BaseOwnableUpgradeable is
         __UUPSUpgradeable_init();
     }
 
-    function renounceOwnership() public override onlyOwner {
+    function renounceOwnership() public override {
         revert("Unable to renounce ownership");
     }
 

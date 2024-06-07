@@ -13,15 +13,18 @@ contract FeeModel is BaseOwnableUpgradeable {
     }
 
     struct FeeConfig {
+        uint256 maxFee; // Maximum fee.
         uint256 minFee; // Minimum fee.
         FeeTier[] tiers; // Order by amount asc.
     }
 
     mapping(Operation op => FeeConfig cfg) defaultFeeConfig;
     mapping(bytes32 dstChain => FeeConfig cfg) crosschainFeeConfig;
+    mapping(address user => FeeConfig cfg) userBurnFeeConfig;
 
     event DefaultFeeConfigSet(Operation indexed _op, FeeConfig _config);
     event CrosschainFeeConfigSet(bytes32 indexed _chain, FeeConfig _config);
+    event UserBurnFeeConfigSet(address indexed _user, FeeConfig _config);
 
     constructor(address _owner) {
         initialize(_owner);
@@ -59,9 +62,14 @@ contract FeeModel is BaseOwnableUpgradeable {
             }
         }
 
+        // Cap the fee.
         if (_fee < minFee) {
-            // Minimal fee
             _fee = minFee;
+        }
+
+        uint256 maxFee = _config.maxFee;
+        if (_fee > maxFee) {
+            _fee = maxFee;
         }
     }
 
@@ -69,8 +77,13 @@ contract FeeModel is BaseOwnableUpgradeable {
         uint224 prevAmount = 0;
         require(
             _config.minFee <= 0.03 * 1e8,
-            "Minimal fee should not exceed 0.03 FBTC"
+            "Minimium fee should not exceed 0.03 FBTC"
         );
+        require(
+            _config.minFee <= _config.maxFee,
+            "Minimium fee should not exceed maximum fee"
+        );
+
         require(_config.tiers.length > 0, "Empty fee config");
 
         for (uint i = 0; i < _config.tiers.length; i++) {
@@ -112,6 +125,15 @@ contract FeeModel is BaseOwnableUpgradeable {
         emit CrosschainFeeConfigSet(_dstChain, _config);
     }
 
+    function setUserBurnFeeConfig(
+        address _user,
+        FeeConfig calldata _config
+    ) external onlyOwner {
+        _validateConfig(_config);
+        userBurnFeeConfig[_user] = _config;
+        emit UserBurnFeeConfigSet(_user, _config);
+    }
+
     // View functions.
 
     function getFee(Request calldata r) external view returns (uint256 _fee) {
@@ -119,6 +141,10 @@ contract FeeModel is BaseOwnableUpgradeable {
         FeeConfig storage _config;
         if (r.op == Operation.CrosschainRequest) {
             _config = crosschainFeeConfig[r.dstChain];
+            if (_config.tiers.length > 0) return _getFee(r.amount, _config);
+        } else if (r.op == Operation.Burn) {
+            address _user = abi.decode(r.srcAddress, (address));
+            _config = userBurnFeeConfig[_user];
             if (_config.tiers.length > 0) return _getFee(r.amount, _config);
         }
         _config = defaultFeeConfig[r.op];
@@ -137,6 +163,13 @@ contract FeeModel is BaseOwnableUpgradeable {
         bytes32 _dstChain
     ) external view returns (FeeConfig memory _config) {
         _config = crosschainFeeConfig[_dstChain];
+        require(_config.tiers.length > 0, "Fee config not set");
+    }
+
+    function getUserBurnFeeConfig(
+        address _user
+    ) external view returns (FeeConfig memory _config) {
+        _config = userBurnFeeConfig[_user];
         require(_config.tiers.length > 0, "Fee config not set");
     }
 }

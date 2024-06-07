@@ -4,26 +4,19 @@ pragma solidity ^0.8.13;
 import {Script, console2 as console} from "forge-std/Script.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 
-contract SingletonFactory {
-    /**
-     * @notice Deploys `_initCode` using `_salt` for defining the deterministic address.
-     * @param _initCode Initialization code.
-     * @param _salt Arbitrary value to modify resulting address.
-     * @return createdContract Created contract address.
-     */
+interface IFactory {
     function deploy(
-        bytes memory _initCode,
-        bytes32 _salt
-    ) public returns (address payable createdContract) {
-        assembly {
-            createdContract := create2(
-                0,
-                add(_initCode, 0x20),
-                mload(_initCode),
-                _salt
-            )
-        }
-    }
+        uint8 typ,
+        bytes32 salt,
+        bytes memory initCode
+    ) external returns (address);
+
+    function getAddress(
+        uint8 typ,
+        bytes32 salt,
+        address sender,
+        bytes calldata initCode
+    ) external view returns (address _contract);
 }
 
 contract BaseScript is Script {
@@ -50,14 +43,24 @@ contract BaseScript is Script {
 
     address public owner;
     uint256 public deployerPrivateKey;
-    SingletonFactory public factory;
+    IFactory public factory;
 
     function setUp() public {
         deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         owner = vm.addr(deployerPrivateKey);
         console.log("owner", owner);
 
-        factory = SingletonFactory(vm.envAddress("SINGLETON_FACTORY"));
+        factory = IFactory(vm.envAddress("SINGLETON_FACTORY"));
+    }
+
+    bytes32 public salt;
+
+    function _deploy(
+        bytes memory initCode
+    ) internal returns (address _contract) {
+        // create3 with sender
+        _contract = factory.deploy(3, salt, initCode);
+        salt = bytes32(uint256(salt) + 1);
     }
 
     function getChainPath(

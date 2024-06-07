@@ -36,6 +36,7 @@ contract FireBridgeTest is Test {
 
         feeModel = new FeeModel(OWNER);
         FeeModel.FeeConfig memory _config;
+        _config.maxFee = type(uint256).max;
         _config.tiers = new FeeModel.FeeTier[](1);
         _config.tiers[0].amountTier = type(uint224).max;
         feeModel.setDefaultFeeConfig(Operation.Mint, _config);

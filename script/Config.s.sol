@@ -60,6 +60,7 @@ contract ConfigScript is BaseScript {
             fee.FEE_RATE_BASE() / 10000 // 0.01%
         );
         FeeModel.FeeConfig memory _config = FeeModel.FeeConfig(
+            type(uint256).max,
             0.0001 * 1e8, // 0.0001 FBTC
             tiers
         );

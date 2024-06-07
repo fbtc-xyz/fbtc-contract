@@ -19,7 +19,8 @@ ifeq ($(chain), seth)
 	--private-key $(PRIVATE_KEY) \
 	--verify \
 	--verifier-url https://api-sepolia.etherscan.io/api? \
-	--broadcast
+	--broadcast \
+	--slow
 else ifeq ($(chain), smnt)
 	@forge script script/Deploy.s.sol \
 	--tc DeployScript \
