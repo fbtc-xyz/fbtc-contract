@@ -5,26 +5,9 @@ import {Operation, ChainCode} from "./Common.sol";
 import {FBTC} from "./FBTC.sol";
 import {FireBridge} from "./FireBridge.sol";
 import {FeeModel} from "./FeeModel.sol";
-import {RoleBasedAccessControl} from "./base/RoleBasedAccessControl.sol";
+import {BaseSafeModule} from "./base/BaseSafeModule.sol";
 
-contract Enum {
-    enum Operation {
-        Call,
-        DelegateCall
-    }
-}
-
-interface ISafe {
-    /// @dev Allows a Module to execute a Safe transaction without any further confirmations and return data
-    function execTransactionFromModuleReturnData(
-        address to,
-        uint256 value,
-        bytes memory data,
-        Enum.Operation operation
-    ) external returns (bool success, bytes memory returnData);
-}
-
-contract FBTCGovernorModule is RoleBasedAccessControl {
+contract FBTCGovernorModule is BaseSafeModule {
     bytes32 public constant FBTC_PAUSER_ROLE = "1_fbtc_pauser";
     bytes32 public constant LOCKER_ROLE = "2_fbtc_locker";
     bytes32 public constant BRIDGE_PAUSER_ROLE = "3_bridge_pauser";
@@ -33,7 +16,14 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
     bytes32 public constant FEE_UPDATER_ROLE = "6_bridge_fee_updater";
 
     FBTC public fbtc;
+    uint256 public maxCrossChainMinFee;
+    uint256 public maxUserBurnMinFee;
+    uint256 public maxUserBurnFeeRate;
+
     event FBTCSet(address indexed _fbtc);
+    event MaxCrossChainMinFeeSet(uint256 indexed _maxCrossChainMinFee);
+    event MaxUserBurnMinFeeSet(uint256 indexed _maxUserBurnMinFee);
+    event MaxUserBurnFeeRateSet(uint256 indexed _maxUserBurnFeeRate);
 
     constructor(address _owner, address _fbtc) {
         initialize(_owner, _fbtc);
@@ -42,6 +32,9 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
     function initialize(address _owner, address _fbtc) public initializer {
         __BaseOwnableUpgradeable_init(_owner);
         fbtc = FBTC(_fbtc);
+        maxCrossChainMinFee = 0.03 * 1e8; // 0.03 FBTC
+        maxUserBurnMinFee = 0.03 * 1e8; // 0.03 FBTC
+        maxUserBurnFeeRate = 2 * 1_000_000 / 1000; // 0.2%
     }
 
     function bridge() public view returns (FireBridge _bridge) {
@@ -52,31 +45,28 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
         _feeModel = FeeModel(bridge().feeModel());
     }
 
-    function _call(address _to, bytes memory _data) internal {
-        (bool success, bytes memory _retData) = ISafe(safe())
-            .execTransactionFromModuleReturnData(
-                _to,
-                0,
-                _data,
-                Enum.Operation.Call
-            );
-        if (!success) {
-            assembly {
-                let size := mload(_retData)
-                revert(add(32, _retData), size)
-            }
-        }
-    }
-
-    function safe() public view returns (address) {
-        return owner();
-    }
-
+    // Admin methods.
     function setFBTC(address _fbtc) external onlyOwner {
         fbtc = FBTC(_fbtc);
         emit FBTCSet(_fbtc);
     }
 
+    function setMaxCrossChainMinFee(uint256 _maxCrossChainMinFee) external onlyOwner {
+        maxCrossChainMinFee = _maxCrossChainMinFee;
+        emit MaxCrossChainMinFeeSet(_maxCrossChainMinFee);
+    }
+
+    function setMaxUserBurnMinFee(uint256 _maxUserBurnMinFee) external onlyOwner {
+        maxUserBurnMinFee = _maxUserBurnMinFee;
+        emit MaxUserBurnMinFeeSet(_maxUserBurnMinFee);
+    }
+
+    function setMaxUserBurnFeeRate(uint256 _maxUserBurnFeeRate) external onlyOwner {
+        maxUserBurnFeeRate = _maxUserBurnFeeRate;
+        emit MaxUserBurnFeeRateSet(_maxUserBurnFeeRate);
+    }
+
+    // Operator methods.
     function lockUserFBTCTransfer(
         address _user
     ) external onlyRole(LOCKER_ROLE) {
@@ -137,23 +127,51 @@ contract FBTCGovernorModule is RoleBasedAccessControl {
         );
     }
 
-    function updateETHCrossChainMinFee(
-        bytes32 chain,
+    function updateCrossChainMinFee(
+        bytes32 _chain,
         uint256 _minFee
     ) external onlyRole(FEE_UPDATER_ROLE) {
         require(
-            _minFee <= 0.01 * 1e8,
-            "Min fee should be lower than 0.01 FBTC"
+            _minFee <= maxCrossChainMinFee,
+            "Min fee exceeds maxCrossChainMinFee"
         );
+
+        // Copy the config set by admin.
         FeeModel _feeModel = feeModel();
-        FeeModel.FeeConfig memory config = _feeModel.getCrosschainFeeConfig(
-            chain
-        );
-        require(config.tiers.length > 0, "Config not exists");
+        FeeModel.FeeConfig memory config;
+        try _feeModel.getCrosschainFeeConfig(
+            _chain
+        ) returns (FeeModel.FeeConfig memory _config){
+            config = _config;
+        } catch {
+            // If no CrosschainFeeConfig is set, get the default one.
+            config = _feeModel.getDefaultFeeConfig(Operation.CrosschainRequest);
+        }
+        // Update minFee.
         config.minFee = _minFee;
+
         _call(
             address(_feeModel),
-            abi.encodeCall(_feeModel.setCrosschainFeeConfig, (chain, config))
+            abi.encodeCall(_feeModel.setCrosschainFeeConfig, (_chain, config))
+        );
+    }
+
+    function updateUserBurnFee(
+        address _user,
+        FeeModel.FeeConfig calldata _config
+    ) external onlyRole(USER_MANAGER_ROLE) {
+        require(_config.minFee <= maxUserBurnMinFee, "Min fee exceeds maxUserBurnMinFee");
+        for (uint i = 0; i < _config.tiers.length; i++) {
+            FeeModel.FeeTier calldata tier = _config.tiers[i];
+            require(
+                tier.feeRate <= maxUserBurnFeeRate,
+                "Fee rate exceeds maxUserBurnFeeRate"
+            );
+        }
+        FeeModel _feeModel = feeModel();
+         _call(
+            address(_feeModel),
+            abi.encodeCall(_feeModel.setUserBurnFeeConfig, (_user, _config))
         );
     }
 }

@@ -41,15 +41,9 @@ contract BaseScript is Script {
         address bridge;
     }
 
-    address public owner;
-    uint256 public deployerPrivateKey;
     IFactory public factory;
 
     function setUp() public {
-        deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        owner = vm.addr(deployerPrivateKey);
-        console.log("owner", owner);
-
         factory = IFactory(vm.envAddress("SINGLETON_FACTORY"));
     }
 
@@ -108,7 +102,12 @@ contract BaseScript is Script {
         string memory chain,
         string memory tag
     ) public view returns (ContractConfig memory c) {
-        string memory name = string.concat(tag, "_", chain);
+        return loadContractConfig(string.concat(tag, "_", chain));
+    }
+
+    function loadContractConfig(
+        string memory name
+    ) public view returns (ContractConfig memory c) {
         string memory path = getPath(
             string.concat("addresses/", name, ".json")
         );
@@ -118,14 +117,12 @@ contract BaseScript is Script {
     }
 
     function saveContractConfig(
-        string memory chain,
-        string memory tag,
+        string memory name,
         address minter,
         address fbtc,
         address fee,
         address bridge
     ) public {
-        string memory name = string.concat(tag, "_", chain);
         string memory path = getPath(
             string.concat("addresses/", name, ".json")
         );

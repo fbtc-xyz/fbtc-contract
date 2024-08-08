@@ -16,7 +16,7 @@ contract ConfigScript is BaseScript {
         string memory minterTag
     ) public {
         vm.createSelectFork(chain);
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         ContractConfig memory c = loadContractConfig(chain, tag);
         MinterConfig memory m = loadMinterConfig(minterTag);
@@ -36,7 +36,7 @@ contract ConfigScript is BaseScript {
         string memory merchantTag
     ) public {
         vm.createSelectFork(chain);
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         ContractConfig memory c = loadContractConfig(chain, tag);
         MerchantConfig memory m = loadMerchantConfig(merchantTag);
@@ -48,7 +48,7 @@ contract ConfigScript is BaseScript {
 
     function setupFee(string memory chain, string memory tag) public {
         vm.createSelectFork(chain);
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         ContractConfig memory c = loadContractConfig(chain, tag);
         FeeModel fee = FeeModel(c.feeModel);
@@ -103,7 +103,7 @@ contract ConfigScript is BaseScript {
 
     function setupDstChains(string memory chain, string memory tag) public {
         vm.createSelectFork(chain);
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
         ContractConfig memory c = loadContractConfig(chain, tag);
 
         bytes32[] memory allChains = new bytes32[](10);

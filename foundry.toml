@@ -15,11 +15,13 @@ seth = "https://rpc-sepolia.rockx.com"
 smnt = "https://rpc.sepolia.mantle.xyz"
 eth = "https://rpc.ankr.com/eth"
 mnt = "https://rpc.mantle.xyz"
+bsc = "https://bsc-dataseed.binance.org"
 
 [etherscan]
-seth = { key = "${ETHERSCAN_API_KEY}", url="https://api-sepolia.etherscan.io/api?", chain="sepolia" }
-smnt = { key = "${MANTLE_SEPOLIA_API_KEY}", url="https://explorer.sepolia.mantle.xyz/api?", chain=5003 }
-eth = { key = "${ETHERSCAN_API_KEY}", url="https://api.etherscan.io/api?"}
-mnt = { key = "${MANTLE_SEPOLIA_API_KEY}", url="https://explorer.mantle.xyz/api?"}
+seth = { key = "${ETHERSCAN_TOKEN}", url="https://api-sepolia.etherscan.io/api?", chain="sepolia" }
+smnt = { key = "${MANTLE_TOKEN}", url="https://explorer.sepolia.mantle.xyz/api?", chain=5003 }
+eth = { key = "${ETHERSCAN_TOKEN}", url="https://api.etherscan.io/api?"}
+mnt = { key = "${MANTLE_TOKEN}", url="https://explorer.mantle.xyz/api?"}
+bsc = { key= "${BSCSCAN_TOKEN}", url="https://api.bscscan.com/api?", chain=56}
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/crates/config
